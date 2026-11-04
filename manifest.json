@@ -1,6 +1,4 @@
-
 {
-  "id": "/progym-app/",
   "name": "proGYM — Allenamento intelligente",
   "short_name": "proGYM",
   "description": "Schede personalizzate, diario di allenamento e progressione intelligente",
@@ -22,5 +20,6 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ]
+  ],
+  "id": "/progym-app/"
 }

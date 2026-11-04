@@ -388,7 +388,19 @@ function setProgram(obj){
   const matches=clean.flatMap(d=>d.ex).filter(e=>historicalIds.has(e.id)).length;
   // Ripristino esplicito per i vecchi utenti: mantiene gli ID solo con una corrispondenza storica reale.
   const restoreIds = obj.program?.restoreExistingIds===true && matches>=2;
-  if(!restoreIds){
+  if(obj.program?.manualEdit===true){
+    // L'editor mantiene gli ID degli esercizi non modificati per preservare i confronti storici.
+    const previous=new Map(PROGRAM.flatMap(d=>d.ex.map(e=>[e.id,e.name])));
+    const knownDays=new Set(PROGRAM.map(d=>d.id));
+    const seed='manual'+Date.now().toString(36)+'_';let seq=0;
+    const seen=new Set();
+    clean.forEach(d=>{if(!knownDays.has(d.id))d.id=seed+'d'+(seq++);
+      d.ex.forEach(e=>{
+        if(previous.get(e.id)!==e.name || seen.has(e.id))e.id=seed+'e'+(seq++);
+        seen.add(e.id);
+      });
+    });
+  }else if(!restoreIds){
     const prefix = "imp" + Date.now().toString(36) + "_";
     clean.forEach((d,i)=>{d.id=prefix+"d"+i; d.ex.forEach((e,j)=>e.id=prefix+"e"+i+"_"+j);});
   }
@@ -564,7 +576,7 @@ function renderList(){
     $("dayTitle").childNodes[0].nodeValue="La tua scheda";
     $("daySub").textContent="Nessun programma importato";
     $("dayNote").innerHTML="";
-    $("list").innerHTML=`<div class="welcome"><h2>Inizia con la tua scheda</h2><p>Questa app non include programmi di altre persone. Compila il profilo e genera la tua scheda con ChatGPT, oppure importa il JSON del tuo coach.</p><button id="emptyProgramStart">Crea o importa una scheda</button></div>`;
+    $("list").innerHTML=`<div class="welcome"><h2>Inizia con la tua scheda</h2><p>Questa app non include programmi di altre persone. Crea una scheda a mano, copia gli esercizi da una scheda cartacea oppure importa un JSON.</p><button id="emptyProgramStart">Crea o importa una scheda</button></div>`;
     $("doneCount").textContent="0/0";
     $("progBar").style.width="0%";
     const start=$("emptyProgramStart");if(start)start.onclick=()=>openSetupGuide(1);
@@ -1097,25 +1109,42 @@ function setActiveNav(name){document.querySelectorAll("[data-nav]").forEach(el=>
 function renderWelcome(){
   const p=getProfile();
   const ready=p.goal && Array.isArray(p.trainingWeekdays)&&p.trainingWeekdays.length;
-  $("welcomeBox").innerHTML=PROGRAM.length?(!ready?`<div class="welcome"><h2>Completa il profilo proGYM</h2><p>Configura obiettivi e giorni per ricevere un prompt personalizzato.</p><button id="welcomeStart">Configura profilo</button></div>`:""):`<div class="welcome"><h2>Benvenuto su proGYM</h2><p>Non ci sono schede preimpostate. Crea il tuo profilo e importa il programma creato con ChatGPT o dal tuo coach.</p><button id="welcomeStart">Inizia la configurazione</button></div>`;
+  $("welcomeBox").innerHTML=PROGRAM.length?(!ready?`<div class="welcome"><h2>Completa il profilo proGYM</h2><p>Configura obiettivi e giorni per ricevere un prompt personalizzato.</p><button id="welcomeStart">Configura profilo</button></div>`:""):`<div class="welcome"><h2>Benvenuto su proGYM</h2><p>Non ci sono schede preimpostate. Crea una scheda manualmente, trascrivila da una foto oppure importa il programma del tuo coach o dell’AI.</p><button id="welcomeStart">Inizia la configurazione</button></div>`;
   const b=$("welcomeStart");if(b)b.onclick=()=>openSetupGuide(1);
 }
 function openSetupGuide(step=1){
- const steps=`<div class="steps">${[1,2,3].map(i=>`<i class="${i<=step?"on":""}"></i>`).join("")}</div>`;
  if(step===1){
-  openSheet(`<h2>1 · Profilo e obiettivi</h2><div class="sub">Il prompt per l'AI userà queste informazioni. La tua scheda rimane vuota finché non ne importi una. Nessun programma di altri utenti viene preinstallato.</div>${steps}<p>Indica almeno obiettivo, priorità specifica e giorni di allenamento. Nel profilo puoi anche modificare il recupero predefinito.</p><button class="big-btn primary" id="guideProfile">Compila il profilo</button><button class="big-btn" id="guideNext">Ho già compilato: avanti</button>`);
-  $("guideProfile").onclick=()=>openProfile(true);$("guideNext").onclick=()=>openSetupGuide(2);return;
+  openSheet(`<h2>Benvenuto su proGYM</h2><div class="sub">La tua scheda è personale: scegli come crearla. Non è obbligatorio usare l'intelligenza artificiale.</div>
+  <button class="big-btn primary" id="newManual">✍ Crea la scheda a mano</button>
+  <button class="big-btn" id="newText">☷ Incolla esercizi come testo</button>
+  <button class="big-btn" id="newPhoto">▣ Ho una scheda cartacea, foto o PDF</button>
+  <button class="big-btn" id="newJson">↥ Importa un file JSON</button>
+  <button class="big-btn" id="newAi">✦ Crea la scheda con ChatGPT</button>
+  <button class="big-btn" id="newProfile">👤 Configura il profilo (facoltativo per iniziare)</button>`);
+  $("newManual").onclick=()=>openManualBuilder();
+  $("newText").onclick=openTextProgram;
+  $("newPhoto").onclick=openDocumentReference;
+  $("newJson").onclick=selectProgramFile;
+  $("newAi").onclick=()=>openSetupGuide(2);
+  $("newProfile").onclick=()=>openProfile(false);
+  return;
  }
  if(step===2){
-  const p=getProfile();if(!p.goal||!Array.isArray(p.trainingWeekdays)||!p.trainingWeekdays.length){alert("Prima compila obiettivo e giorni nel profilo.");openSetupGuide(1);return;}
-  openSheet(`<h2>2 · Genera la scheda con ChatGPT</h2>${steps}<div class="sub">Il prompt include obiettivi, priorità, giorni precisi, durata, attrezzatura, preferenze, recuperi e formato JSON compatibile.</div><button class="big-btn primary" id="guideCopy">Copia il prompt personalizzato</button><button class="big-btn" id="guideChatGPT">Apri ChatGPT</button><button class="big-btn" id="guideStep3">Ho ottenuto il JSON: importa</button><button class="big-btn" onclick="openSetupGuide(1)">Indietro</button>`);
-  $("guideCopy").onclick=copyProfilePrompt;
+  const p=getProfile();
+  openSheet(`<h2>Scheda con ChatGPT</h2><div class="sub">${p.goal?'Profilo disponibile: il prompt contiene obiettivi e preferenze.':'Prima compila il profilo per generare una richiesta personalizzata.'}</div>
+   <button class="big-btn primary" id="guideProfile">${p.goal?'Modifica il profilo':'Compila il profilo'}</button>
+   <button class="big-btn" id="guideCopy">Copia il prompt personalizzato</button>
+   <button class="big-btn" id="guideChatGPT">Apri ChatGPT</button>
+   <button class="big-btn" id="guideStep3">Ho il JSON: importa</button>
+   <button class="big-btn" onclick="openSetupGuide(1)">Altre modalità</button>`);
+  $("guideProfile").onclick=()=>openProfile(true);
+  $("guideCopy").onclick=()=>{if(!p.goal){alert('Completa prima il profilo.');return;}copyProfilePrompt();};
   $("guideChatGPT").onclick=()=>window.open("https://chatgpt.com/","_blank","noopener,noreferrer");
-  $("guideStep3").onclick=()=>openSetupGuide(3);return;
+  $("guideStep3").onclick=()=>openSetupGuide(3);
+  return;
  }
- openSheet(`<h2>3 · Importa la nuova scheda</h2>${steps}<div class="sub">Incolla il JSON restituito dall'AI oppure carica il file. Prima di sostituire la scheda mostreremo un'anteprima.</div><button class="big-btn primary" id="guidePaste">Incolla il JSON</button><button class="big-btn" id="guideFile">Carica file JSON</button><button class="big-btn" onclick="openSetupGuide(2)">Indietro</button>`);
- $("guidePaste").onclick=openPasteProgram;
- $("guideFile").onclick=selectProgramFile;
+ openSheet(`<h2>Importa la scheda JSON</h2><div class="sub">Incolla il JSON o carica il file. Ti mostreremo un'anteprima prima di sostituire il programma.</div><button class="big-btn primary" id="guidePaste">Incolla JSON</button><button class="big-btn" id="guideFile">Scegli file JSON</button><button class="big-btn" onclick="openSetupGuide(1)">Indietro</button>`);
+ $("guidePaste").onclick=openPasteProgram;$("guideFile").onclick=selectProgramFile;
 }
 function copyProfilePrompt(){
  const p=getProfile();const {birthDate,nickname,age:oldAge,...safeProfile}=p;
@@ -1212,9 +1241,113 @@ function openProfile(fromGuide=false){
   };
 }
 
+
+/* ---------- v2.4: creazione schede senza AI ---------- */
+const MANUAL_DRAFT_KEY="progym_manual_draft_v24";
+const WEEKDAYS=["","Lunedì","Martedì","Mercoledì","Giovedì","Venerdì","Sabato","Domenica"];
+let manualDraft=null;
+function blankManualDay(weekday=1){return {name:WEEKDAYS[weekday]+' · Allenamento',weekday,exercises:[]};}
+function blankManualExercise(){const p=getProfile();return {name:"",sets:3,reps:"8-12",restSeconds:Number(p.defaultRestSeconds)||180,muscle:"Altro",notes:""};}
+function openManualBuilder(){
+ try{manualDraft=JSON.parse(localStorage.getItem(MANUAL_DRAFT_KEY));}catch(_){manualDraft=null;}
+ if(!manualDraft){
+  if(PROGRAM.length){
+   manualDraft={name:programName(),days:PROGRAM.map(d=>({id:d.id,name:d.title,weekday:d.weekday,exercises:d.ex.map(e=>({id:e.id,name:e.name,sets:e.sets,reps:e.reps,restSeconds:e.rest,muscle:e.muscle,notes:e.tip||""}))}))};
+  }else{const p=getProfile();const wd=p.trainingWeekdays?.[0]||1;manualDraft={name:"La mia scheda",days:[blankManualDay(wd)]};}
+ }
+ renderManualBuilder();
+}
+function persistManual(){try{localStorage.setItem(MANUAL_DRAFT_KEY,JSON.stringify(manualDraft));}catch(_){}}
+function captureManual(){
+ if(!manualDraft)return;
+ const title=document.getElementById('mbName');if(!title)return;
+ manualDraft.name=title.value.trim().slice(0,80);
+ document.querySelectorAll('[data-mb-day]').forEach(node=>{
+  const i=Number(node.dataset.mbDay),d=manualDraft.days[i];if(!d)return;
+  d.name=node.querySelector('[data-mb-name]').value.slice(0,85);
+  d.weekday=Number(node.querySelector('[data-mb-weekday]').value);
+  node.querySelectorAll('[data-mb-ex]').forEach(en=>{
+   const j=Number(en.dataset.mbEx),e=d.exercises[j];if(!e)return;
+   e.name=en.querySelector('[data-mb-exname]').value.slice(0,110);
+   e.sets=Number(en.querySelector('[data-mb-sets]').value);
+   e.reps=en.querySelector('[data-mb-reps]').value.trim();
+   e.restSeconds=Number(en.querySelector('[data-mb-rest]').value);
+   e.muscle=en.querySelector('[data-mb-muscle]').value;
+   e.notes=en.querySelector('[data-mb-notes]').value.slice(0,500);
+  });
+ });persistManual();
+}
+function renderManualBuilder(){
+ const wds=WEEKDAYS.map((x,i)=>i?`<option value="${i}">${x}</option>`:'').join('');
+ const blocks=manualDraft.days.map((d,i)=>`<div class="preview-day" data-mb-day="${i}" style="margin-bottom:14px">
+ <div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><strong>Giornata ${i+1}</strong><button class="big-btn" style="width:auto;padding:9px" data-mb-remove-day="${i}">Rimuovi</button></div>
+ <label class="profile-field">Nome giornata<input data-mb-name value="${safeAttr(d.name)}" placeholder="Es. Pull A"></label>
+ <label class="profile-field">Giorno abituale<select data-mb-weekday>${wds}</select></label>
+ ${d.exercises.map((e,j)=>`<div data-mb-ex="${j}" style="border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:12px">
+ <div style="display:flex;justify-content:space-between;align-items:center"><strong>Esercizio ${j+1}</strong><button class="big-btn" style="width:auto;padding:8px" data-mb-remove-ex="${i}:${j}">Elimina</button></div>
+ <label class="profile-field">Nome esercizio<input data-mb-exname value="${safeAttr(e.name)}" placeholder="Es. Lat machine presa neutra"></label>
+ <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><label class="profile-field">Serie<input type="number" min="1" max="10" data-mb-sets value="${e.sets}"></label><label class="profile-field">Ripetizioni<input data-mb-reps value="${safeAttr(e.reps)}" placeholder="8-12"></label></div>
+ <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><label class="profile-field">Recupero (sec)<input type="number" min="15" max="600" step="15" data-mb-rest value="${e.restSeconds}"></label><label class="profile-field">Gruppo muscolare<select data-mb-muscle>${MUSCLE_OPTIONS.map(m=>`<option ${m===e.muscle?'selected':''}>${m}</option>`).join('')}</select></label></div>
+ <label class="profile-field">Indicazioni (facoltative)<input data-mb-notes value="${safeAttr(e.notes||'')}" placeholder="Es. movimento controllato"></label>
+ </div>`).join('')}
+ <button class="big-btn" data-mb-add-ex="${i}">+ Aggiungi esercizio</button></div>`).join('');
+ openSheet(`<h2>Scrivi la tua scheda</h2><div class="sub">Inserisci liberamente giorni ed esercizi. La bozza viene salvata sul dispositivo. Prima dell'attivazione vedrai l'anteprima.</div>
+ <label class="profile-field">Nome programma<input id="mbName" value="${safeAttr(manualDraft.name)}" placeholder="La mia scheda"></label>${blocks}
+ <button class="big-btn" id="mbAddDay">+ Aggiungi giornata</button>
+ <button class="big-btn primary" id="mbReview">Controlla e salva scheda</button>
+ <button class="big-btn" id="mbClose">Salva bozza ed esci</button>`);
+ document.querySelectorAll('[data-mb-day]').forEach((el,i)=>el.querySelector('[data-mb-weekday]').value=String(manualDraft.days[i].weekday||i+1));
+ document.querySelectorAll('[data-mb-add-ex]').forEach(b=>b.onclick=()=>{captureManual();const i=Number(b.dataset.mbAddEx);manualDraft.days[i].exercises.push(blankManualExercise());persistManual();renderManualBuilder();});
+ document.querySelectorAll('[data-mb-remove-ex]').forEach(b=>b.onclick=()=>{captureManual();const [i,j]=b.dataset.mbRemoveEx.split(':').map(Number);manualDraft.days[i].exercises.splice(j,1);persistManual();renderManualBuilder();});
+ document.querySelectorAll('[data-mb-remove-day]').forEach(b=>b.onclick=()=>{captureManual();if(manualDraft.days.length===1){alert('Serve almeno una giornata.');return;}manualDraft.days.splice(Number(b.dataset.mbRemoveDay),1);persistManual();renderManualBuilder();});
+ $('mbAddDay').onclick=()=>{captureManual();if(manualDraft.days.length>=7){alert('Massimo 7 giornate.');return;}const used=new Set(manualDraft.days.map(d=>d.weekday));const next=[1,2,3,4,5,6,7].find(x=>!used.has(x));manualDraft.days.push(blankManualDay(next||1));persistManual();renderManualBuilder();};
+ $('mbClose').onclick=()=>{captureManual();closeSheet();showToast('Bozza salvata');};
+ $('mbReview').onclick=()=>{captureManual();try{const obj={schemaVersion:'1.0',program:{name:manualDraft.name||'La mia scheda',manualEdit:true,days:manualDraft.days.map(d=>({id:d.id,name:d.name,weekday:d.weekday,exercises:d.exercises}))}};validateProgram(obj,true);importProgramText(JSON.stringify(obj),()=>localStorage.removeItem(MANUAL_DRAFT_KEY));}catch(err){alert('Controlla la scheda: '+err.message);}};
+}
+function openTextProgram(){
+ openSheet(`<h2>Incolla la scheda come testo</h2><div class="sub">Una riga per esercizio. Formato: <b>Nome esercizio | serie x ripetizioni | recupero in secondi | gruppo muscolare</b>.<p>Per separare i giorni scrivi una riga come <b># Lunedì - Pull</b>.</p></div>
+ <textarea id="rawWorkoutText" rows="12" style="width:100%;padding:12px;background:var(--surface-2);color:var(--text);border:1px solid var(--line);border-radius:10px" placeholder="# Lunedì - Pull&#10;Lat machine | 3x8-12 | 180 | Dorso&#10;Rematore | 3x10 | 150 | Dorso&#10;# Giovedì - Gambe&#10;Leg press | 3x10-12 | 180 | Quadricipiti"></textarea>
+ <p class="warn">Il riconoscimento è basato su un formato guidato, non sull'AI. Controlla sempre l'anteprima.</p>
+ <button class="big-btn primary" id="parseWorkoutText">Controlla la scheda</button><button class="big-btn" onclick="openSetupGuide(1)">Indietro</button>`);
+ $('parseWorkoutText').onclick=()=>{try{
+  const lines=$('rawWorkoutText').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  if(!lines.length)throw Error('Incolla almeno un esercizio.');
+  const days=[];let current=null;
+  for(const [i,line] of lines.entries()){
+   if(line.startsWith('#')){
+    const title=line.replace(/^#+\s*/,'').trim();if(!title)throw Error('Intestazione del giorno vuota.');
+    const wd=WEEKDAYS.findIndex(x=>x&&new RegExp(x,'i').test(title));
+    current={name:title,weekday:wd>0?wd:null,exercises:[]};days.push(current);continue;
+   }
+   if(!current){const first=Number(getProfile().trainingWeekdays?.[0])||1;current=blankManualDay(first);days.push(current);}
+   const x=line.split('|').map(v=>v.trim());if(x.length<2||x.length>4)throw Error('Riga '+(i+1)+': usa Nome | 3x8-12 | 180 | Dorso');
+   const match=x[1].match(/^(\d+)\s*[x×]\s*(\d+)(?:\s*[-–]\s*(\d+))?$/i);if(!match)throw Error('Riga '+(i+1)+': formato serie/ripetizioni non valido.');
+   let muscle=x[3]||recognizeMuscle(x[0])||'Altro';muscle=MUSCLE_OPTIONS.find(m=>m.toLowerCase()===muscle.toLowerCase())||'Altro';
+   current.exercises.push({name:x[0],sets:Number(match[1]),reps:match[3]?match[2]+'-'+match[3]:match[2],restSeconds:Number(x[2]||getProfile().defaultRestSeconds||180),muscle});
+  }
+  const p=getProfile();const avail=p.trainingWeekdays||[];const used=new Set();for(const d of days){if(!d.weekday||used.has(d.weekday)){d.weekday=[...avail,1,2,3,4,5,6,7].find(n=>!used.has(Number(n)))||1;}used.add(d.weekday);}
+  importProgramText(JSON.stringify({schemaVersion:'1.0',program:{name:'Scheda da testo',days}}));
+ }catch(e){alert('Impossibile interpretare il testo: '+e.message);}};
+}
+function openDocumentReference(){
+ openSheet(`<h2>Hai una foto o un PDF?</h2><div class="sub">Puoi aprire la foto o il PDF come riferimento e trascrivere la scheda direttamente nell'app. <b>Il riconoscimento automatico dei documenti non è ancora disponibile</b>: non carichiamo i tuoi file su server esterni.</div>
+ <label class="profile-field">Seleziona foto o PDF<input id="sourceWorkoutFile" type="file" accept="image/*,.pdf,application/pdf"></label>
+ <div id="sourceWorkoutPreview" class="preview-day">Nessun documento selezionato. Puoi comunque creare la scheda manualmente.</div>
+ <button class="big-btn primary" id="sourceToManual">Inserisci gli esercizi manualmente</button>
+ <button class="big-btn" id="sourceToText">Incolla la scheda come testo</button><button class="big-btn" onclick="openSetupGuide(1)">Indietro</button>`);
+ $('sourceWorkoutFile').onchange=e=>{const f=e.target.files?.[0];if(!f)return;const target=$('sourceWorkoutPreview');if(f.size>12*1024*1024){target.textContent='File troppo grande (max 12 MB).';return;}
+  if(f.type.startsWith('image/')){const reader=new FileReader();reader.onload=()=>{target.innerHTML=`<img alt="Anteprima della scheda" style="max-width:100%;height:auto;border-radius:10px" src="${reader.result}">`;};reader.readAsDataURL(f);}
+  else if(f.type==='application/pdf'||f.name.toLowerCase().endsWith('.pdf')){target.textContent='PDF selezionato: '+f.name+'. Aprilo dal telefono per leggerlo mentre inserisci gli esercizi.';}
+  else target.textContent='Formato non supportato.';
+ };
+ $('sourceToManual').onclick=()=>openManualBuilder();$('sourceToText').onclick=openTextProgram;
+}
 function openProgramManager(){
   openSheet(`<h2>Gestione schede</h2><div class="sub">Programma attivo: ${safe(programName())} · ${PROGRAM.length} giornate. Ogni dispositivo conserva i propri dati.</div>
-    <button class="big-btn primary" id="startGuide">Crea / importa scheda (guida in 3 passaggi)</button>
+    <button class="big-btn primary" id="startGuide">Crea o importa una scheda</button>
+    <button class="big-btn" id="manualProgram">Crea / modifica scheda manualmente</button>
+    <button class="big-btn" id="textProgram">Incolla esercizi come testo</button>
+    <button class="big-btn" id="imageProgram">Usa foto o PDF come riferimento</button>
     <button class="big-btn" id="importProgram">Importa JSON da file</button>
     <button class="big-btn" id="pasteProgram">Incolla JSON</button>
     <button class="big-btn" id="exportProgram">Esporta scheda JSON</button>
@@ -1223,13 +1356,16 @@ function openProgramManager(){
     <p class="warn">L'importazione sostituisce la scheda visualizzata, non cancella i precedenti allenamenti. Esegui comunque un backup prima di modifiche importanti. Le sostituzioni di esercizio fatte durante l'allenamento valgono solo per quella data.</p>
     <button class="big-btn" onclick="closeSheet()">Chiudi</button>`);
   $("startGuide").onclick=()=>openSetupGuide(1);
+  $("manualProgram").onclick=()=>openManualBuilder();
+  $("textProgram").onclick=openTextProgram;
+  $("imageProgram").onclick=openDocumentReference;
   $("importProgram").onclick=selectProgramFile;
   $("pasteProgram").onclick=openPasteProgram;
-  $("exportProgram").onclick=()=>{if(!PROGRAM.length){alert("Prima importa una scheda.");return;}downloadJson({schemaVersion:"1.0",program:{name:programName(),days:PROGRAM.map(d=>({name:d.title,tab:d.tab,weekday:d.weekday,sub:d.sub,note:d.note,exercises:d.ex.map(e=>({name:e.name,sets:e.sets,reps:e.reps,rir:e.rir??2,restSeconds:e.rest,muscle:e.muscle,notes:e.tip,variants:e.variants||[],bw:!!e.bw}))}))}},"scheda-personale.json");};
+  $("exportProgram").onclick=()=>{if(!PROGRAM.length){alert("Prima crea o importa una scheda.");return;}downloadJson({schemaVersion:"1.0",program:{name:programName(),days:PROGRAM.map(d=>({name:d.title,tab:d.tab,weekday:d.weekday,sub:d.sub,note:d.note,exercises:d.ex.map(e=>({name:e.name,sets:e.sets,reps:e.reps,rir:e.rir??2,restSeconds:e.rest,muscle:e.muscle,notes:e.tip,variants:e.variants||[],bw:!!e.bw}))}))}},"scheda-personale.json");};
   $("copyPrompt").onclick=copyProfilePrompt;
   $("resetProgram").onclick=()=>{if(!confirm("Rimuovere la scheda attiva? Lo storico degli allenamenti non verrà cancellato."))return;PROGRAM=[];window.ACTIVE_PROGRAM_NAME="";localStorage.removeItem(PKEY);rebuildMuscles();state.dayId=null;closeSheet();renderDays();renderList();renderWelcome();};
 }
-async function importProgramText(txt){
+async function importProgramText(txt, onSuccess){
   try{
     const obj=JSON.parse(txt.replace(/^\uFEFF/,""));
     const checkedDays=validateProgram(obj,true);
@@ -1245,7 +1381,7 @@ async function importProgramText(txt){
     const total=checkedDays.reduce((n,d)=>n+d.ex.length,0);
     const blocks=checkedDays.map(d=>`<div class="preview-day"><b>${safe(dayNames[d.weekday]||d.title)} · ${safe(d.title)}</b><small>${d.ex.length} esercizi · ${d.ex.reduce((n,e)=>n+e.sets,0)} serie</small><small>${d.ex.map(e=>`${safe(e.name)} (${e.sets}×${safe(e.reps)}, ${fmt(e.rest)})`).join(" · ")}</small></div>`).join("");
     openSheet(`<h2>Anteprima della scheda</h2><div class="sub">${safe(name)} · ${checkedDays.length} giorni · ${total} esercizi. Controlla tutto prima di confermare.</div>${blocks}<p class="warn">L'importazione sostituirà la scheda attiva. Il vecchio storico non sarà cancellato, ma i nuovi esercizi avranno ID separati.</p><button class="big-btn primary" id="approveProgram">Conferma e importa</button><button class="big-btn" onclick="openSetupGuide(3)">Annulla</button>`);
-    $("approveProgram").onclick=()=>{try{setProgram(obj);closeSheet();renderWelcome();showToast("Scheda importata correttamente");setActiveNav("workout");}catch(err){alert("Importazione non riuscita: "+err.message);}};
+    $("approveProgram").onclick=()=>{try{setProgram(obj);if(typeof onSuccess==="function")onSuccess();closeSheet();renderWelcome();showToast("Scheda importata correttamente");setActiveNav("workout");}catch(err){alert("Importazione non riuscita: "+err.message);}};
   }catch(e){alert("JSON non valido: "+e.message);}
 }
 $("btnProfile").onclick=openProfile;
