@@ -1,0 +1,1293 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#161A21">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Palestra">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Scheda Palestra · Focus Dorso</title>
+<style>
+:root{
+  --bg:#161A21;
+  --surface:#1E242D;
+  --surface-2:#252C37;
+  --line:#2F3845;
+  --text:#EAF0F7;
+  --muted:#8A97A8;
+  --accent:#F5A524;
+  --accent-dim:#5a3f11;
+  --heavy:#FF5C7A;
+  --medium:#FF9F45;
+  --light:#3ED598;
+  --ok:#3ED598;
+  --gold:#FFD166;
+  --radius:14px;
+  --tap:48px;
+  font-size:16px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:system-ui,-apple-system,"Samsung Sans","Roboto",sans-serif;
+  line-height:1.45;
+  padding-bottom:calc(120px + env(safe-area-inset-bottom));
+  overscroll-behavior-y:contain;
+}
+input,button,select{font-family:inherit;font-size:1rem;color:inherit}
+button{background:none;border:none;cursor:pointer}
+.num{font-variant-numeric:tabular-nums}
+
+/* ---------- Topbar ---------- */
+header{
+  position:sticky;top:0;z-index:30;
+  background:rgba(22,26,33,.94);
+  backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line);
+  padding-top:env(safe-area-inset-top);
+}
+.bar{display:flex;align-items:center;gap:8px;padding:10px 14px 8px}
+.bar h1{font-size:1rem;font-weight:650;margin:0;letter-spacing:.2px;flex:1}
+.bar h1 span{display:block;font-size:.75rem;font-weight:450;color:var(--muted)}
+.icon-btn{
+  width:40px;height:40px;border-radius:12px;background:var(--surface);
+  display:grid;place-items:center;font-size:1.05rem;border:1px solid var(--line);flex-shrink:0;
+}
+.days{display:flex;gap:6px;padding:0 14px 10px;overflow-x:auto;scrollbar-width:none}
+.days::-webkit-scrollbar{display:none}
+.day-tab{
+  flex:1 0 auto;min-width:74px;padding:9px 12px;border-radius:12px;
+  background:var(--surface);border:1px solid var(--line);
+  font-size:.82rem;font-weight:600;color:var(--muted);text-align:center;white-space:nowrap;
+}
+.day-tab b{display:block;font-size:.66rem;font-weight:500;opacity:.8}
+.day-tab.active{background:var(--accent);border-color:var(--accent);color:#1a1205}
+.progress{height:3px;background:var(--line)}
+.progress i{display:block;height:100%;background:var(--accent);width:0;transition:width .25s ease}
+
+/* ---------- Toast ---------- */
+.toast{
+  position:fixed;top:calc(env(safe-area-inset-top) + 8px);left:50%;z-index:90;
+  background:var(--gold);color:#241a02;font-weight:700;font-size:.85rem;
+  padding:10px 16px;border-radius:12px;opacity:0;pointer-events:none;
+  transform:translate(-50%,-16px);transition:all .25s ease;
+  box-shadow:0 8px 22px rgba(0,0,0,.45);white-space:nowrap;
+}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+
+/* ---------- Session strip ---------- */
+.session{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  margin:14px;padding:12px 14px;background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--radius);
+}
+.session label{font-size:.72rem;color:var(--muted);display:block}
+.session input[type=date]{
+  background:transparent;border:none;padding:0;font-size:.95rem;font-weight:600;color:var(--text);
+}
+.session .count{text-align:right;font-size:.95rem;font-weight:700}
+.session .count small{display:block;font-size:.7rem;font-weight:500;color:var(--muted)}
+
+.note-day{
+  margin:0 14px 14px;padding:12px 14px;border-radius:var(--radius);
+  background:var(--accent-dim);border:1px solid #6d4f18;
+  font-size:.84rem;color:#ffe2b0;
+}
+
+/* ---------- Exercise card ---------- */
+.ex{
+  margin:0 14px 12px;background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;
+}
+.ex.done{border-color:#2e5f4a}
+.ex-head{display:flex;align-items:flex-start;gap:10px;padding:13px 14px}
+.ex-head .t{flex:1;min-width:0}
+.ex-name{font-size:.98rem;font-weight:650;line-height:1.25}
+.ex-meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:5px;font-size:.76rem;color:var(--muted)}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px;vertical-align:1px}
+.dot.heavy{background:var(--heavy)}.dot.medium{background:var(--medium)}.dot.light{background:var(--light)}
+.info-btn{width:32px;height:32px;border-radius:10px;background:var(--surface-2);display:grid;place-items:center;color:var(--muted);font-size:.85rem;font-weight:700;flex-shrink:0}
+.tip{
+  margin:0 14px 12px;padding:10px 12px;border-left:2px solid var(--accent);
+  background:var(--surface-2);border-radius:0 10px 10px 0;font-size:.82rem;color:#cfd8e3;display:none;
+}
+.tip.open{display:block}
+
+.suggest{
+  margin:0 14px 10px;padding:9px 12px;border-radius:10px;
+  background:rgba(245,165,36,.1);border:1px solid rgba(245,165,36,.35);
+  font-size:.8rem;color:#ffcf82;display:flex;gap:7px;align-items:flex-start;
+}
+.suggest b{color:var(--accent);flex-shrink:0}
+
+.variant-tag{font-size:.72rem;color:var(--accent);font-weight:600;margin-top:2px}
+.variant-list{display:flex;flex-wrap:wrap;gap:8px}
+.variant-chip{
+  padding:10px 14px;border-radius:10px;background:var(--surface-2);border:1px solid var(--line);
+  font-size:.85rem;color:var(--text);font-weight:600;
+}
+.variant-chip.active{background:var(--accent);border-color:var(--accent);color:#1a1205}
+
+.sets{padding:0 10px 10px}
+.set-row{
+  display:grid;grid-template-columns:26px 1fr 1fr var(--tap);
+  gap:8px;align-items:center;padding:5px 4px;position:relative;
+}
+.set-head{
+  display:grid;grid-template-columns:26px 1fr 1fr var(--tap);gap:8px;
+  padding:2px 4px 6px;font-size:.68rem;color:var(--muted);
+}
+.set-n{font-size:.8rem;color:var(--muted);text-align:center;font-weight:600}
+.fld{position:relative}
+.fld input{
+  width:100%;height:var(--tap);border-radius:11px;background:var(--surface-2);
+  border:1px solid var(--line);padding:0 10px;font-size:1.05rem;font-weight:600;text-align:center;
+}
+.fld input:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+.fld input::placeholder{color:#5c6878;font-weight:500}
+.chk{
+  width:var(--tap);height:var(--tap);border-radius:11px;background:var(--surface-2);
+  border:1px solid var(--line);display:grid;place-items:center;font-size:1.1rem;color:#5c6878;position:relative;
+}
+.set-row.done .chk{background:var(--ok);border-color:var(--ok);color:#0d2a1e}
+.set-row.done .fld input{opacity:.65}
+.set-row.pr .fld input{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
+.pr-star{position:absolute;top:-6px;left:-4px;font-size:.75rem}
+.last{font-size:.68rem;color:var(--muted);padding:0 4px 8px;text-align:center;grid-column:1/-1}
+.set-actions{display:flex;gap:8px;padding:4px 4px 6px}
+.mini{
+  flex:1;height:38px;border-radius:10px;background:var(--surface-2);border:1px solid var(--line);
+  font-size:.78rem;color:var(--muted);font-weight:600;
+}
+
+/* ---------- Profilo, feedback ---------- */
+.feedback{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;padding:5px 4px 10px}
+.feedback label{font-size:.69rem;color:var(--muted)}
+.feedback select,.profile-field input,.profile-field select{width:100%;min-height:42px;margin-top:5px;padding:7px 8px;background:var(--surface-2);color:var(--text);border:1px solid var(--line);border-radius:9px}
+.profile-field{display:block;color:var(--muted);font-size:.8rem;margin:10px 0}
+/* ---------- Coaching leggibile ---------- */
+.previous-workout{margin:0 14px 10px;padding:11px 12px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px}
+.previous-workout strong{font-size:.79rem;color:var(--accent)}
+.previous-workout .line{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}
+.previous-workout .pill{padding:5px 8px;background:var(--surface);border:1px solid var(--line);border-radius:8px;font-size:.8rem}
+.previous-workout .muted{margin-top:7px;font-size:.73rem;color:var(--muted)}
+.profile-days{display:flex;flex-wrap:wrap;gap:7px;margin:8px 0 12px}
+.profile-days label{display:flex;align-items:center;gap:5px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;font-size:.8rem}
+.profile-days input{accent-color:var(--accent)}
+/* ---------- v2.2: mobile navigation / first start / guided setup ---------- */
+body{padding-bottom:calc(155px + env(safe-area-inset-bottom))}
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;z-index:45;background:rgba(30,36,45,.97);backdrop-filter:blur(12px);border-top:1px solid var(--line);padding:8px 8px calc(8px + env(safe-area-inset-bottom));display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.bottom-nav button{min-height:53px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:2px;color:var(--muted);font-size:.72rem}
+.bottom-nav button span{font-size:1.15rem}
+.bottom-nav button.active{color:var(--accent);background:rgba(245,165,36,.1)}
+.timer{bottom:calc(80px + env(safe-area-inset-bottom))!important}
+.welcome{margin:12px 14px;padding:16px;border-radius:16px;background:linear-gradient(145deg,#33311f,var(--surface));border:1px solid rgba(245,165,36,.4)}
+.welcome h2{font-size:1.05rem;margin:0 0 6px}.welcome p{color:#cfd8e3;font-size:.82rem;margin:0 0 12px}.welcome button{background:var(--accent);padding:10px 14px;border-radius:10px;font-weight:700;color:#241a02}
+.steps{display:flex;gap:7px;margin:12px 0 16px}.steps i{height:5px;flex:1;border-radius:5px;background:var(--line)}.steps i.on{background:var(--accent)}
+.profile-field textarea{width:100%;min-height:80px;margin-top:5px;padding:9px 10px;background:var(--surface-2);color:var(--text);border:1px solid var(--line);border-radius:9px;resize:vertical}
+.profile-field input[type=checkbox]{width:auto;min-height:0}
+.preview-day{padding:10px;margin:8px 0;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;font-size:.82rem}
+.preview-day small{display:block;color:var(--muted);margin-top:4px}
+.rest-detail{color:var(--muted);font-size:.72rem;padding:0 12px 8px}
+/* ---------- Rest timer ---------- */
+.timer{
+  position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:60;
+  background:var(--surface);border:1px solid var(--accent);border-radius:16px;
+  padding:12px 14px;display:none;align-items:center;gap:12px;
+  box-shadow:0 12px 30px rgba(0,0,0,.5);
+}
+.timer.on{display:flex}
+.timer .n{font-size:1.8rem;font-weight:700;letter-spacing:-.5px;min-width:86px}
+.timer .lbl{flex:1;font-size:.78rem;color:var(--muted)}
+.timer button{padding:10px 12px;border-radius:10px;background:var(--surface-2);border:1px solid var(--line);font-size:.8rem;font-weight:600}
+.timer .ring{height:3px;background:var(--line);border-radius:2px;margin-top:6px;overflow:hidden}
+.timer .ring i{display:block;height:100%;background:var(--accent)}
+
+/* ---------- Sheet ---------- */
+.sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:70;display:none}
+.sheet-bg.on{display:block}
+.sheet{
+  position:fixed;left:0;right:0;bottom:0;z-index:80;max-height:85vh;overflow-y:auto;
+  background:var(--surface);border-radius:20px 20px 0 0;border-top:1px solid var(--line);
+  padding:18px 16px calc(28px + env(safe-area-inset-bottom));transform:translateY(100%);
+  transition:transform .22s ease;
+}
+.sheet.on{transform:translateY(0)}
+.sheet h2{margin:0 0 4px;font-size:1.05rem}
+.sheet .sub{color:var(--muted);font-size:.8rem;margin-bottom:14px}
+.hist{border-top:1px solid var(--line);padding:11px 0}
+.hist b{font-size:.82rem;font-weight:600}
+.hist p{margin:4px 0 0;font-size:.85rem;color:#cfd8e3}
+.hist .pr-tag{color:var(--gold);font-weight:700;font-size:.7rem;margin-left:6px}
+.big-btn{
+  width:100%;height:50px;border-radius:12px;background:var(--surface-2);
+  border:1px solid var(--line);font-weight:600;margin-top:10px;
+}
+.big-btn.primary{background:var(--accent);color:#1a1205;border-color:var(--accent)}
+.big-btn.danger{color:#ff8b9e}
+.empty{color:var(--muted);font-size:.85rem;padding:14px 0}
+.warn{font-size:.75rem;color:var(--muted);margin-top:14px;line-height:1.5}
+
+/* ---------- Chart ---------- */
+.chart-box{margin:6px 0 4px}
+.chart{width:100%;height:90px;display:block}
+.chart-range{display:flex;justify-content:space-between;font-size:.7rem;color:var(--muted);margin-top:2px}
+
+/* ---------- Weekly stats ---------- */
+.week-range{font-size:.78rem;color:var(--muted);margin-bottom:2px}
+.mbar{display:grid;grid-template-columns:84px 1fr 34px;align-items:center;gap:10px;padding:8px 0}
+.mlabel{font-size:.8rem;color:#cfd8e3}
+.mtrack{height:10px;background:var(--surface-2);border-radius:6px;overflow:hidden}
+.mtrack i{display:block;height:100%;background:var(--accent);border-radius:6px}
+.mval{font-size:.82rem;font-weight:700;text-align:right}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="bar">
+    <div class="t" style="flex:1">
+      <h1 id="dayTitle">—<span id="daySub">—</span></h1>
+    </div>
+    <button class="icon-btn" id="btnProgram" aria-label="Gestione programma" style="display:none">⇄</button>
+    <button class="icon-btn" id="btnProfile" aria-label="Profilo atleta" style="display:none">👤</button>
+    <button class="icon-btn" id="btnWeekly" aria-label="Statistiche settimanali" style="display:none">📊</button>
+    <button class="icon-btn" id="btnSettings" aria-label="Impostazioni">⚙</button>
+  </div>
+  <div class="days" id="days"></div>
+  <div class="progress"><i id="progBar"></i></div>
+</header>
+
+<div class="toast" id="toast"></div>
+
+<div class="session">
+  <div>
+    <label for="dateInput">Allenamento del</label>
+    <input type="date" id="dateInput">
+  </div>
+  <div class="count"><span id="doneCount" class="num">0/0</span><small>serie completate</small></div>
+</div>
+
+<div id="welcomeBox"></div>
+<div id="dayNote"></div>
+<main id="list"></main>
+
+<div class="timer" id="timer">
+  <div>
+    <div class="n num" id="timerNum">0:00</div>
+    <div class="ring"><i id="timerRing"></i></div>
+  </div>
+  <div class="lbl" id="timerLbl">Recupero</div>
+  <button id="timerAdd">+30s</button>
+  <button id="timerStop">Stop</button>
+</div>
+
+<nav class="bottom-nav" aria-label="Navigazione principale">
+  <button data-nav="workout" class="active"><span>🏋</span>Allenati</button>
+  <button data-nav="program"><span>📋</span>Scheda</button>
+  <button data-nav="stats"><span>📊</span>Progressi</button>
+  <button data-nav="profile"><span>👤</span>Profilo</button>
+</nav>
+<div class="sheet-bg" id="sheetBg"></div>
+<div class="sheet" id="sheet"></div>
+
+<script>
+/* =========================================================
+   1. LA SCHEDA
+   muscle: gruppo muscolare usato per il riepilogo settimanale
+   ========================================================= */
+let PROGRAM = [
+  {
+    id:"lun", weekday:1, tab:"Lun", tabSub:"Pull A", title:"Pull A · Dorso", sub:"Lunedì · focus dorsali",
+    note:"Focus larghezza dorsali. Recupero 3:00 dopo OGNI SERIE, non dopo ogni singola ripetizione. 2–3 RIR sulle tirate; evita il cedimento. Interrompi o adatta se torna dolore alla spalla.",
+    ex:[
+      {"id": "n_l_lat", "name": "Lat machine triangolo V", "sets": 3, "reps": "8-12", "load": "heavy", "loadTxt": "Impegnativo", "rest": 180, "muscle": "Dorso", "tip": "RIR 2. Riferimento recente 73 kg, solo se restano tecnica e RIR corretti. Controlla la risalita, senza appenderti passivamente."} ,
+      {"id": "n_l_row", "name": "Rematore manubri su panca 30°", "sets": 3, "reps": "8-12", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Dorso", "tip": "RIR 2. Petto sostenuto, traiettoria naturale e gomiti senza eccessiva estensione dietro il busto."} ,
+      {"id": "n_l_pulley", "name": "Pulley unilaterale", "sets": 2, "reps": "10-12", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Dorso", "tip": "RIR 2. Gomito verso anca, tronco stabile. Serie per lato; recupero 3 minuti al termine della serie bilaterale."} ,
+      {"id": "n_l_curl", "name": "Curl macchina", "sets": 2, "reps": "10-12", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Bicipiti", "tip": "RIR 1–2. Hai riferito 70–80 lb sulla macchina: registra il valore in kg o converti prima di inserirlo (70–80 lb ≈ 32–36 kg)."} ,
+      {"id": "n_l_hyper", "name": "Iperestensioni", "sets": 2, "reps": "10-15", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Femorali", "tip": "RIR 2. Mantieni una traiettoria controllata; interrompi se senti la zona lombare in modo anomalo."} ,
+      {"id": "n_l_crunch", "name": "Crunch al cavo / macchina", "sets": 2, "reps": "12-15", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Core", "tip": "RIR 1–2. Movimento controllato, evita slanci."} ,
+    ]
+  },
+  {
+    id:"mar", weekday:2, tab:"Mar", tabSub:"Push", title:"Push · Petto/Spalle", sub:"Martedì · spinta controllata",
+    note:"Le spinte inclinate e la chest press sono entrambe già testate. Non aumentare insieme volume, carico e vicinanza al cedimento. 3:00 di recupero fra tutte le serie.",
+    ex:[
+      {"id": "n_m_db", "name": "Spinte manubri panca inclinata 15–30°", "sets": 3, "reps": "8-12", "load": "heavy", "loadTxt": "Impegnativo", "rest": 180, "muscle": "Petto", "tip": "RIR 2–3. Riferimento recente 20 kg per manubrio, 8–10 ripetizioni, circa RIR 4. Progredisci prima nelle ripetizioni."} ,
+      {"id": "n_m_chest", "name": "Chest press inclinata", "sets": 2, "reps": "8-12", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Petto", "tip": "RIR 2–3. Riferimento 40 kg × 8–9 ripetizioni; conserva solo se senza fastidio e con il RIR previsto."} ,
+      {"id": "n_m_lateral", "name": "Alzate laterali cavo basso (pollice in alto)", "sets": 2, "reps": "12-15", "load": "light", "loadTxt": "Controllato", "rest": 180, "muscle": "Spalle", "tip": "RIR 3. Variante tollerata a 6,8 kg: rimani nel ROM confortevole, senza inseguire subito carichi maggiori."} ,
+      {"id": "n_m_rear", "name": "Alzate posteriori su panca inclinata 45°", "sets": 2, "reps": "12-15", "load": "light", "loadTxt": "Controllato", "rest": 180, "muscle": "Spalle", "tip": "RIR 2–3. Presa comoda e ROM tollerato; se provoca fastidio, ometti e parlane con il fisioterapista."} ,
+      {"id": "n_m_tri_ext", "name": "Estensioni tricipiti al cavo (busto flesso)", "sets": 2, "reps": "10-15", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Tricipiti", "tip": "RIR 2. Esegui la variante già presente nel programma adattato."} ,
+      {"id": "n_m_pushdown", "name": "Pushdown tricipiti", "sets": 2, "reps": "10-15", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Tricipiti", "tip": "RIR 2. Polsi stabili, gomiti controllati."} ,
+    ]
+  },
+  {
+    id:"gio", weekday:4, tab:"Gio", tabSub:"Lower", title:"Lower · Gambe", sub:"Giovedì · gambe e addome",
+    note:"Conserviamo gli esercizi che già esegui, aggiungendo polpacci e addome. Niente squat libero o stacchi con bilanciere. Recupero sempre 3:00.",
+    ex:[
+      {"id": "n_g_pend", "name": "Pendulum squat", "sets": 3, "reps": "8-12", "load": "heavy", "loadTxt": "Impegnativo", "rest": 180, "muscle": "Quadricipiti", "tip": "RIR 1–2. Mantieni una presa che non dia fastidio alla spalla. Escursione controllata."} ,
+      {"id": "n_g_curl", "name": "Leg curl seduto", "sets": 3, "reps": "10-15", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Femorali", "tip": "RIR 1–2. Eccentrica controllata."} ,
+      {"id": "n_g_ext", "name": "Leg extension", "sets": 3, "reps": "10-15", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Quadricipiti", "tip": "RIR 1. Controlla salita e discesa."} ,
+      {"id": "n_g_add", "name": "Adductor machine (chiusure)", "sets": 2, "reps": "12-15", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Adduttori", "tip": "RIR 1–2. Movimento senza rimbalzi."} ,
+      {"id": "n_g_calf", "name": "Calf raise macchina", "sets": 3, "reps": "10-15", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Polpacci", "tip": "RIR 1. Escursione controllata e pausa in allungamento."} ,
+      {"id": "n_g_abs", "name": "Crunch macchina / cavo", "sets": 3, "reps": "10-15", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Core", "tip": "RIR 1–2. Evita di tirare con spalle e braccia."} ,
+    ]
+  },
+  {
+    id:"ven", weekday:5, tab:"Ven", tabSub:"Upper B", title:"Upper B · Dorso", sub:"Venerdì · trazioni e richiami",
+    note:"Trazioni supine 3×10 già tollerate: nessuna zavorra per ora. 3:00 di recupero dopo ogni serie. Valuta la spalla anche il giorno seguente.",
+    ex:[
+      {"id": "n_v_pullup", "name": "Trazioni supine a corpo libero", "sets": 3, "reps": "8-10", "load": "heavy", "loadTxt": "Impegnativo", "rest": 180, "muscle": "Dorso", "tip": "RIR 2–3. Hai completato 3×10 senza dolore. Non aggiungere zavorra per ora; evita la discesa completamente passiva.", "bw": true} ,
+      {"id": "n_v_row", "name": "Low row macchina", "sets": 3, "reps": "8-12", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Dorso", "tip": "RIR 2. Gomiti abbastanza vicini ai fianchi, ROM confortevole."} ,
+      {"id": "n_v_pushups", "name": "Push-up", "sets": 3, "reps": "8-15", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Petto", "tip": "RIR 2–3. Mantieni la tecnica già tollerata, scapole libere di muoversi.", "bw": true, "variants": ["Chest press macchina (solo se tollerata)"]} ,
+      {"id": "n_v_curl", "name": "Curl al cavo basso", "sets": 2, "reps": "10-12", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Bicipiti", "tip": "RIR 2. Nessun dolore alla spalla; controlla la fase di ritorno."} ,
+      {"id": "n_v_pushdown", "name": "Pushdown tricipiti", "sets": 2, "reps": "10-15", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Tricipiti", "tip": "RIR 2. Esecuzione controllata."} ,
+    ]
+  },
+];
+const MUSCLES = ["Petto","Dorso","Spalle","Bicipiti","Tricipiti","Quadricipiti","Femorali","Adduttori","Polpacci","Core","Collo"];
+let MUSCLE_OF = {};
+const DEFAULT_PROGRAM = JSON.parse(JSON.stringify(PROGRAM));
+function rebuildMuscles(){ MUSCLE_OF = {}; PROGRAM.forEach(d => d.ex.forEach(e => MUSCLE_OF[e.id] = e.muscle)); }
+rebuildMuscles();
+
+/* =========================================================
+   2. STORAGE
+   ========================================================= */
+const KEY = "palestra_v1";
+const TKEY = "palestra_timer_v1";
+const PKEY = "palestra_program_v2";
+const PROFILE_KEY = "palestra_profile_v2";
+const Store = (() => {
+  let mem = null, ok = true;
+  try { localStorage.setItem("__t","1"); localStorage.removeItem("__t"); }
+  catch(e){ ok = false; }
+  return {
+    persistent: ok,
+    load(){
+      if(mem) return mem;
+      try{ mem = JSON.parse(localStorage.getItem(KEY)) || {sessions:{}}; }
+      catch(e){ mem = {sessions:{}}; }
+      if(!mem.sessions) mem.sessions = {};
+      return mem;
+    },
+    save(){ if(!ok) return; try{ localStorage.setItem(KEY, JSON.stringify(mem)); }catch(e){} }
+    ,replace(obj){ mem = obj; this.save(); }
+  };
+})();
+
+/* =========================================================
+   3. STATO
+   ========================================================= */
+const todayISO = () => new Date().toISOString().slice(0,10);
+let state = { dayId: guessDay(), date: todayISO() };
+function safe(text){ return String(text ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function safeAttr(text){ return safe(text); }
+function getProfile(){try{return JSON.parse(localStorage.getItem(PROFILE_KEY)) || {}}catch(e){return {}}}
+const REST_OVERRIDES_KEY="palestra_rest_overrides_v22";
+function getRestOverrides(){try{return JSON.parse(localStorage.getItem(REST_OVERRIDES_KEY))||{}}catch(e){return {}}}
+function effectiveRest(ex){
+  const overrides=getRestOverrides();
+  if(Number.isInteger(overrides[ex.id]) && overrides[ex.id]>=15 && overrides[ex.id]<=600)return overrides[ex.id];
+  const p=getProfile();
+  if(p.restMode==="global"){
+    const sec=Number(p.defaultRestSeconds);
+    if(Number.isInteger(sec)&&sec>=15&&sec<=600)return sec;
+  }
+  return ex.rest;
+}
+function editExerciseRest(exId){
+  const ex=day().ex.find(x=>x.id===exId);if(!ex)return;
+  const overrides=getRestOverrides();
+  const own=Object.prototype.hasOwnProperty.call(overrides,ex.id);
+  const p=getProfile();
+  openSheet(`<h2>Recupero · ${safe(ex.name)}</h2><div class="sub">Programma: ${fmt(ex.rest)} · ${p.restMode==="global"?`Predefinito personale: ${fmt(Number(p.defaultRestSeconds)||180)}`:"Predefinito: scheda importata"}.</div>
+    <label class="profile-field">Recupero tra le serie (secondi)<input type="number" id="restExerciseValue" min="15" max="600" step="15" value="${effectiveRest(ex)}"></label>
+    <p class="warn">Questa modifica si applica solo a questo esercizio nelle prossime sedute. Il recupero parte quando completi una serie.</p>
+    <button class="big-btn primary" id="saveExerciseRest">Salva recupero</button>
+    <button class="big-btn" id="resetExerciseRest">Ripristina tempo predefinito ${own?"(annulla modifica)":""}</button>
+    <button class="big-btn" onclick="closeSheet()">Annulla</button>`);
+  $("saveExerciseRest").onclick=()=>{const v=Number($("restExerciseValue").value);if(!Number.isInteger(v)||v<15||v>600){alert("Inserisci un recupero tra 15 e 600 secondi.");return;}overrides[ex.id]=v;localStorage.setItem(REST_OVERRIDES_KEY,JSON.stringify(overrides));closeSheet();renderList();showToast("Recupero aggiornato");};
+  $("resetExerciseRest").onclick=()=>{delete overrides[ex.id];localStorage.setItem(REST_OVERRIDES_KEY,JSON.stringify(overrides));closeSheet();renderList();};
+}
+function loadProgram(){
+  try {
+    const obj = JSON.parse(localStorage.getItem(PKEY));
+    if(obj){ PROGRAM = validateProgram(obj, false); window.ACTIVE_PROGRAM_NAME=String(obj.program?.name||"Scheda personalizzata").slice(0,80); }
+  } catch(err){ console.warn("Programma personalizzato ignorato:", err); }
+  rebuildMuscles();
+}
+function saveProgram(){localStorage.setItem(PKEY,JSON.stringify({schemaVersion:"1.0",program:{name:programName(),days:PROGRAM}}));}
+function programName(){return window.ACTIVE_PROGRAM_NAME || "Scheda di esempio";}
+function setProgram(obj){
+  const clean = validateProgram(obj, true);
+  const name = String((obj.program && obj.program.name)||obj.name||"Scheda personalizzata").slice(0,80);
+  // Identificativi diversi per ogni importazione: nessuna attribuzione erronea dello storico.
+  const prefix = "imp" + Date.now().toString(36) + "_";
+  clean.forEach((d,i)=>{d.id=prefix+"d"+i; d.ex.forEach((e,j)=>e.id=prefix+"e"+i+"_"+j);});
+  PROGRAM=clean; window.ACTIVE_PROGRAM_NAME=name;
+  saveProgram(); rebuildMuscles(); state.dayId=PROGRAM[0].id; renderDays(); renderList();
+}
+const MUSCLE_OPTIONS = ["Petto","Dorso","Spalle","Bicipiti","Tricipiti","Quadricipiti","Femorali","Glutei","Adduttori","Polpacci","Core","Collo","Altro"];
+function validateProgram(obj, rejectEmpty){
+  const root = obj && (obj.program || obj);
+  const days = Array.isArray(root?.days) ? root.days : (Array.isArray(root) ? root : null);
+  if(!days || days.length < 1 || days.length > 7) throw Error("La scheda deve contenere da 1 a 7 giornate.");
+  let count=0;
+  const usedWeekdays = new Set();
+  const result = days.map((d,i)=>{
+    const wd = d.weekday == null || d.weekday === "" ? null : Number(d.weekday);
+    if(wd !== null && (!Number.isInteger(wd) || wd < 1 || wd > 7)) throw Error("Giornata "+(i+1)+": weekday deve essere da 1 (lunedì) a 7 (domenica).");
+    if(wd !== null && usedWeekdays.has(wd)) throw Error("Due giornate non possono avere lo stesso weekday.");
+    if(wd !== null) usedWeekdays.add(wd);
+    if(!d || !Array.isArray(d.exercises || d.ex)) throw Error("Giornata "+(i+1)+": esercizi mancanti.");
+    const exercises = d.exercises || d.ex;
+    if(exercises.length<1 || exercises.length>25) throw Error("Giornata "+(i+1)+": servono 1–25 esercizi.");
+    count += exercises.length;
+    const ex = exercises.map((e,j)=>{
+      const name = String(e.name||"").trim();
+      if(!name || name.length>110) throw Error("Nome esercizio non valido, giorno "+(i+1)+".");
+      const sets = Number(e.sets), rest = Number(e.restSeconds ?? e.rest ?? 180);
+      let reps = e.reps;
+      if(reps && typeof reps === "object") reps = `${reps.min}-${reps.max}`;
+      reps = String(reps ?? "8-12");
+      if(!Number.isInteger(sets) || sets<1 || sets>10) throw Error(name+": serie da 1 a 10.");
+      if(!/^(?:\d{1,3})(?:-\d{1,3})?$/.test(reps)) throw Error(name+": ripetizioni non valide (es. 8-12).");
+      const nums = reps.split("-").map(Number);
+      if(nums[0]<1 || nums[nums.length-1]>100 || nums[0]>nums[nums.length-1]) throw Error(name+": range ripetizioni non valido.");
+      if(!Number.isInteger(rest)||rest<15||rest>600) throw Error(name+": recupero non valido.");
+      const rir = Number(e.rir ?? 2);
+      if(!Number.isFinite(rir)||rir<0||rir>6) throw Error(name+": RIR deve essere tra 0 e 6.");
+      const muscle = String(e.muscle || e.primaryMuscle || "Altro").trim();
+      if(!MUSCLE_OPTIONS.includes(muscle)) throw Error(name+": muscolo non riconosciuto: "+muscle);
+      return { id:/^[a-zA-Z0-9_-]{1,90}$/.test(String(e.id||""))?String(e.id):`d${i}e${j}`, name, sets, reps, rest, muscle, rir, load:["heavy","medium","light"].includes(e.load)?e.load:"medium",loadTxt:"Personalizzato", tip:String(e.tip||e.notes||`RIR ${rir}. Mantieni una tecnica controllata.`).slice(0,500),bw:Boolean(e.bw),variants:Array.isArray(e.variants)?e.variants.filter(v=>typeof v==="string").slice(0,8).map(v=>v.slice(0,90)):[]};
+    });
+    return {weekday:wd,id:/^[a-zA-Z0-9_-]{1,90}$/.test(String(d.id||""))?String(d.id):`day${i}`, tab:String(d.tab||d.name||`G${i+1}`).slice(0,12),tabSub:String(d.tabSub||"Scheda").slice(0,20),title:String(d.title||d.name||`Giorno ${i+1}`).slice(0,85),sub:String(d.sub||"Scheda importata").slice(0,100),note:String(d.note||"").slice(0,600),ex};
+  });
+  if(count>130) throw Error("Troppi esercizi nella scheda.");
+  return result;
+}
+loadProgram();
+if(!PROGRAM.some(d=>d.id===state.dayId)) state.dayId=PROGRAM[0].id;
+function guessDay(){ const map = {1:"lun",2:"mar",4:"gio",5:"ven"}; return map[new Date().getDay()] || "lun"; }
+const day = () => PROGRAM.find(d => d.id === state.dayId);
+function weekdayFromISO(iso){
+  const w = new Date(iso + "T12:00:00").getDay();
+  return w === 0 ? 7 : w;
+}
+function selectDayForDate(){
+  const match=PROGRAM.find(d=>d.weekday === weekdayFromISO(state.date));
+  if(match) state.dayId=match.id;
+  renderDays();renderList();
+}
+function ageFromDOB(dob){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(dob||"")) return null;
+  const born=new Date(dob+"T12:00:00"),now=new Date();
+  if(Number.isNaN(born.getTime()) || born>now || born.getFullYear()<1900 || born.toISOString().slice(0,10)!==dob) return null;
+  let age=now.getFullYear()-born.getFullYear();
+  if((now.getMonth()<born.getMonth()) || (now.getMonth()===born.getMonth() && now.getDate()<born.getDate()))age--;
+  return age;
+}
+
+const sessionKey = (date=state.date, dayId=state.dayId) => date + "__" + dayId;
+
+function session(create=false){
+  const db = Store.load();
+  const k = sessionKey();
+  if(!db.sessions[k] && create) db.sessions[k] = {};
+  return db.sessions[k] || {};
+}
+// Normalizza i dati "vecchio formato" (array di serie) in {variant, sets}
+function normalizeRaw(ex, raw){
+  if(!raw) return null;
+  if(Array.isArray(raw)) return {variant: ex.name, sets: raw};
+  return raw;
+}
+// Ritorna {variant, sets} per l'esercizio nella sessione corrente
+function exEntry(ex, create=false){
+  const s = session(create);
+  let raw = normalizeRaw(ex, s[ex.id]);
+  if(!raw && create){
+    raw = {variant: ex.name, muscle:ex.muscle, sets: Array.from({length:ex.sets}, () => ({w:"",r:"",d:false}))};
+  }
+  if(raw && create) s[ex.id] = raw;
+  return raw;
+}
+function lastPerformance(ex, variant){
+  const db = Store.load();
+  const keys = Object.keys(db.sessions)
+    .filter(k => k !== sessionKey() && k.split("__")[0] < state.date)
+    .filter(k => {
+      const raw = normalizeRaw(ex, db.sessions[k][ex.id]);
+      return raw && raw.variant === variant && raw.sets.some(s => s.d || s.w || s.r);
+    })
+    .sort().reverse();
+  if(!keys.length) return null;
+  const raw = normalizeRaw(ex, db.sessions[keys[0]][ex.id]);
+  return { date: keys[0].split("__")[0], sets: raw.sets };
+}
+function bestWeightBefore(ex, variant){
+  const db = Store.load();
+  const curKey = sessionKey();
+  let best = null;
+  Object.keys(db.sessions).forEach(k => {
+    if(k === curKey) return;
+    const raw = normalizeRaw(ex, db.sessions[k][ex.id]);
+    if(!raw || raw.variant !== variant) return;
+    raw.sets.forEach(set => {
+      const w = parseFloat(set.w);
+      if(set.d && !isNaN(w) && (best === null || w > best)) best = w;
+    });
+  });
+  return best;
+}
+
+/* ---------- Progressione suggerita ---------- */
+function parseRepRange(reps){
+  const clean = reps.replace("s","");
+  const parts = clean.split("-").map(Number);
+  return parts.length === 2 ? parts : [parts[0], parts[0]];
+}
+function roundHalf(n){ return Math.round(n*2)/2; }
+function previousWorkoutBox(ex,variant){
+  const last=lastPerformance(ex,variant);
+  if(!last)return "";
+  const sets=last.sets.filter(s=>s.d && s.r!=="" && s.r!=null);
+  if(!sets.length)return "";
+  const items=sets.map((s,i)=>`<span class="pill">${i+1}ª: <b>${safe(s.r)} rip.</b>${ex.bw ? (Number(s.w)>0?" · +"+safe(s.w)+" kg":" · corpo libero") : (s.w!==""?" · "+safe(s.w)+" kg":"")}</span>`).join("");
+  return `<div class="previous-workout"><strong>ULTIMA VOLTA · ${dmy(last.date)}</strong><div class="line">${items}</div><div class="muted">Questi valori sono lo storico registrato, non obiettivi ancora da completare.</div></div>`;
+}
+function suggestion(ex,variant){
+  if(ex.unit==="sec")return null;
+  const last=lastPerformance(ex,variant);
+  if(!last)return "Registra una seduta completa per ricevere un consiglio basato sui tuoi dati.";
+  const completed=last.sets.filter(s=>s.d && s.r!=="" && Number.isFinite(Number(s.r)));
+  if(!completed.length)return "Mancano ripetizioni registrate nella seduta precedente: completa il diario per avere consigli.";
+  const [min,max]=parseRepRange(ex.reps);
+  const reps=completed.map(s=>Number(s.r));
+  const weightValues=completed.map(s=>s.w===""?null:Number(s.w));
+  const hasWeights=weightValues.every(v=>v!==null && Number.isFinite(v));
+  const sameLoad=hasWeights && weightValues.every(v=>v===weightValues[0]);
+  const total=reps.reduce((a,b)=>a+b,0);
+  const commonLoad=sameLoad ? weightValues[0] : null;
+  const loadText=ex.bw?(commonLoad>0?`+${commonLoad} kg di zavorra`:`il corpo libero`):commonLoad!==null?`${commonLoad} kg`:`il carico precedente`;
+  if(completed.length!==ex.sets)return `Hai registrato ${completed.length} serie su ${ex.sets} previste. <b>Ripeti il carico e completa il programma</b> prima di aumentarlo.`;
+  if(!sameLoad && !ex.bw)return `L'ultima seduta contiene carichi diversi o mancanti: <b>consolida le serie</b> e confronta tecnica e ripetizioni; nessun aumento automatico.`;
+  if(reps.some(n=>n<min))return `Ultima seduta: ${reps.join(" / ")} rip. (totale ${total}), almeno una serie sotto ${min}. <b>Consolida ${loadText}</b> o riducilo se la tecnica peggiora.`;
+  if(reps.every(n=>n>=max))return `Ultima seduta: ${reps.join(" / ")} rip. (totale ${total}). <b>Valuta un piccolo incremento di carico</b> solo se tutte le serie erano controllate e con margine sufficiente.`;
+  const target=[...reps];
+  for(let i=target.length-1;i>=0;i--){if(target[i]<max){target[i]++;break;}}
+  return `Ultima seduta: <b>${reps.join(" / ")} rip.</b> (totale ${total}). Oggi mantieni <b>${loadText}</b> e prova <b>${target.join(" / ")}</b> (totale ${total+1}). Se la giornata è più faticosa, ripetere i risultati precedenti va bene.`;
+}
+
+/* =========================================================
+   4. RENDER
+   ========================================================= */
+const $ = id => document.getElementById(id);
+
+function renderDays(){
+  $("days").innerHTML = PROGRAM.map(d =>
+    `<button class="day-tab ${d.id===state.dayId?"active":""}" data-day="${d.id}">${safe(d.tab)}<b>${safe(d.tabSub)}</b></button>`
+  ).join("");
+}
+
+function renderList(){
+  const d = day();
+  $("dayTitle").childNodes[0].nodeValue = d.title;
+  $("daySub").textContent = d.sub;
+  $("dayNote").innerHTML = d.note ? `<div class="note-day">${safe(d.note)}</div>` : "";
+
+  $("list").innerHTML = d.ex.map(ex => {
+    const entry = exEntry(ex);
+    const rows = entry ? entry.sets : Array.from({length:ex.sets},()=>({w:"",r:"",d:false}));
+    const variant = entry ? entry.variant : ex.name;
+    const isAlt = variant !== ex.name;
+    const last = lastPerformance(ex, variant);
+    const best = bestWeightBefore(ex, variant);
+    const allDone = rows.length && rows.every(s => s.d);
+    const unit = ex.unit === "sec" ? "sec" : "kg";
+    const wPh = ex.bw ? "0" : "kg";
+    const sugg = suggestion(ex, variant);
+
+    const setRows = rows.map((s,i) => {
+      const w = parseFloat(s.w);
+      const isPR = !ex.bw && s.d && best !== null && !isNaN(w) && w > best;
+      return `
+      <div class="set-row ${s.d?"done":""} ${isPR?"pr":""}" data-ex="${ex.id}" data-i="${i}">
+        <div class="set-n num">${i+1}</div>
+        <div class="fld">${isPR?'<span class="pr-star">🏆</span>':''}<input type="number" inputmode="decimal" step="0.5" class="num w" placeholder="${wPh}" value="${safeAttr(s.w)}"></div>
+        <div class="fld"><input type="number" inputmode="numeric" class="num r" placeholder="${safeAttr(ex.reps)}" value="${safeAttr(s.r)}"></div>
+        <button class="chk" aria-label="Serie completata">✓</button>
+      </div>`;
+    }).join("");
+
+    return `
+    <section class="ex ${allDone?"done":""}" data-ex="${ex.id}">
+      <div class="ex-head">
+        <div class="t">
+          <div class="ex-name">${safe(ex.name)}</div>
+          ${isAlt ? `<div class="variant-tag">Oggi: ${safe(variant)} · ${safe(entry?.muscle || ex.muscle)}</div>` : ""}
+          <div class="ex-meta">
+            <span class="num">${ex.sets}×${ex.reps}</span>
+            <span><i class="dot ${ex.load}"></i>${safe(ex.loadTxt)}</span>
+            <span>⏱ ${fmt(effectiveRest(ex))}</span>
+          </div>
+        </div>
+        <button class="info-btn" data-variant="${ex.id}" aria-label="Cambia variante">⇄</button>
+        <button class="info-btn" data-tip="${ex.id}">i</button>
+      </div>
+      <div class="tip" id="tip-${ex.id}">${safe(ex.tip)}</div>
+      ${previousWorkoutBox(ex, variant)}
+      ${sugg ? `<div class="suggest"><b>→</b><span>${sugg}</span></div>` : ""}
+      <div class="sets">
+        <div class="set-head"><span></span><span>${unit==="sec"?"zav.":"Carico (kg)"}</span><span>${unit==="sec"?"Secondi":"Reps"}</span><span></span></div>
+        ${setRows}
+        ${String(getProfile().limitations||"").trim() ? `<div class="last">Se hai limitazioni attive, segui le indicazioni del professionista e modifica l'esercizio se necessario.</div>` : ""}
+        <div class="set-actions">
+          <button class="mini" data-add="${ex.id}">+ serie</button>
+          <button class="mini" data-del="${ex.id}">– serie</button>
+          <button class="mini" data-hist="${ex.id}">Storico</button>
+          <button class="mini" data-rest="${ex.id}">⏱ Recupero</button>
+        </div>
+      </div>
+    </section>`;
+  }).join("");
+
+  updateProgress();
+}
+
+function updateProgress(){
+  let done = 0, tot = 0;
+  day().ex.forEach(ex => {
+    const entry = exEntry(ex);
+    const rows = entry ? entry.sets : Array.from({length:ex.sets},()=>({d:false}));
+    tot += rows.length;
+    done += rows.filter(r => r.d).length;
+  });
+  $("doneCount").textContent = done + "/" + tot;
+  $("progBar").style.width = tot ? (done/tot*100)+"%" : "0%";
+}
+
+const fmt = s => Math.floor(s/60) + ":" + String(s%60).padStart(2,"0");
+const dmy = iso => iso.split("-").reverse().slice(0,2).join("/");
+
+/* =========================================================
+   5. INTERAZIONI
+   ========================================================= */
+document.addEventListener("click", e => {
+  const tab = e.target.closest("[data-day]");
+  if(tab){ state.dayId = tab.dataset.day; renderDays(); renderList(); window.scrollTo({top:0}); return; }
+
+  const info = e.target.closest("[data-tip]");
+  if(info){ $("tip-"+info.dataset.tip).classList.toggle("open"); return; }
+
+  const variantBtn = e.target.closest("[data-variant]");
+  if(variantBtn){ openVariantPicker(variantBtn.dataset.variant); return; }
+
+  const chk = e.target.closest(".chk");
+  if(chk){ toggleSet(chk.closest(".set-row")); return; }
+
+  const add = e.target.closest("[data-add]");
+  if(add){ changeSets(add.dataset.add, +1); return; }
+
+  const del = e.target.closest("[data-del]");
+  if(del){ changeSets(del.dataset.del, -1); return; }
+
+  const restButton=e.target.closest("[data-rest]");
+  if(restButton){editExerciseRest(restButton.dataset.rest);return;}
+
+  const hist = e.target.closest("[data-hist]");
+  if(hist){ openHistory(hist.dataset.hist); return; }
+});
+
+document.addEventListener("input", e => {
+  const row = e.target.closest(".set-row");
+  if(!row) return;
+  const ex = day().ex.find(x => x.id === row.dataset.ex);
+  const entry = exEntry(ex, true);
+  entry.sets[+row.dataset.i][e.target.classList.contains("w") ? "w" : "r"] = e.target.value;
+  Store.save();
+});
+
+function toggleSet(row){
+  const ex = day().ex.find(x => x.id === row.dataset.ex);
+  const entry = exEntry(ex, true);
+  const rows = entry.sets;
+  const i = +row.dataset.i;
+  const s = rows[i];
+  s.d = !s.d;
+
+  if(s.d){
+    if(!s.w && !s.r){
+      const prev = rows.slice(0,i).reverse().find(x => x.w || x.r);
+      const last = lastPerformance(ex, entry.variant);
+      const src = prev || (last && last.sets[i]) || null;
+      if(src){ s.w = src.w || ""; s.r = src.r || ""; }
+    }
+    const best = bestWeightBefore(ex, entry.variant);
+    const w = parseFloat(s.w);
+    if(!ex.bw && best !== null && !isNaN(w) && w > best){
+      const label = entry.variant !== ex.name ? `${ex.name} (${entry.variant})` : ex.name;
+      showToast(`🏆 Nuovo record su ${label}: ${w} kg`);
+    }
+    startTimer(effectiveRest(ex), ex.name);
+  }
+  Store.save();
+  renderList();
+}
+
+function changeSets(exId, delta){
+  const ex = day().ex.find(x => x.id === exId);
+  const entry = exEntry(ex, true);
+  const rows = entry.sets;
+  if(delta > 0 && rows.length < 10) rows.push({w:"",r:"",d:false});
+  if(delta < 0 && rows.length > 1) rows.pop();
+  Store.save();
+  renderList();
+}
+
+$("dateInput").addEventListener("change", e => {
+  state.date = e.target.value || todayISO();
+  selectDayForDate();
+});
+
+function showToast(msg){
+  const el = $("toast");
+  el.textContent = msg;
+  el.classList.add("on");
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => el.classList.remove("on"), 2800);
+}
+
+/* ---------- Timer di recupero: basato su timestamp reale, sopravvive a schermo spento ---------- */
+let t = { endTime:null, total:0, label:"", id:null };
+let wakeLock = null;
+
+function persistTimer(){
+  try{
+    if(t.endTime) localStorage.setItem(TKEY, JSON.stringify({endTime:t.endTime, total:t.total, label:t.label}));
+    else localStorage.removeItem(TKEY);
+  }catch(e){}
+}
+async function requestWakeLock(){
+  try{ if("wakeLock" in navigator) wakeLock = await navigator.wakeLock.request("screen"); }catch(e){}
+}
+function releaseWakeLock(){
+  if(wakeLock){ wakeLock.release().catch(()=>{}); wakeLock = null; }
+}
+function startTimer(sec, label){
+  t.endTime = Date.now() + sec*1000;
+  t.total = sec;
+  t.label = label;
+  persistTimer();
+  $("timerLbl").textContent = "Recupero · " + label;
+  $("timer").classList.add("on");
+  requestWakeLock();
+  clearInterval(t.id);
+  tick();
+  t.id = setInterval(tick, 250);
+}
+function tick(){
+  if(!t.endTime) return;
+  const left = Math.max(0, Math.round((t.endTime - Date.now())/1000));
+  $("timerNum").textContent = fmt(left);
+  $("timerRing").style.width = (left/t.total*100) + "%";
+  if(left <= 0) endTimer();
+}
+function endTimer(){
+  clearInterval(t.id);
+  t.endTime = null;
+  persistTimer();
+  releaseWakeLock();
+  beep();
+  if(navigator.vibrate) navigator.vibrate([250,120,250]);
+  setTimeout(() => $("timer").classList.remove("on"), 4000);
+}
+function stopTimer(){
+  clearInterval(t.id);
+  t.endTime = null;
+  persistTimer();
+  releaseWakeLock();
+  $("timer").classList.remove("on");
+}
+$("timerStop").onclick = stopTimer;
+$("timerAdd").onclick = () => {
+  if(!t.endTime) return;
+  t.endTime += 30000;
+  t.total = Math.max(t.total, Math.round((t.endTime - Date.now())/1000));
+  persistTimer();
+  tick();
+};
+document.addEventListener("visibilitychange", () => {
+  if(document.visibilityState === "visible" && t.endTime){
+    tick();
+    if(!wakeLock) requestWakeLock();
+  }
+});
+// resume da localStorage se la pagina viene ricaricata mentre il timer era attivo
+(function resumeTimer(){
+  try{
+    const raw = localStorage.getItem(TKEY);
+    if(!raw) return;
+    const saved = JSON.parse(raw);
+    if(saved.endTime && saved.endTime > Date.now()){
+      t.endTime = saved.endTime; t.total = saved.total; t.label = saved.label;
+      $("timerLbl").textContent = "Recupero · " + saved.label;
+      $("timer").classList.add("on");
+      requestWakeLock();
+      clearInterval(t.id);
+      tick();
+      t.id = setInterval(tick, 250);
+    } else {
+      localStorage.removeItem(TKEY);
+    }
+  }catch(e){}
+})();
+
+let actx = null;
+function beep(){
+  try{
+    actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+    [0,.28,.56].forEach(d => {
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.frequency.value = 880; o.connect(g); g.connect(actx.destination);
+      g.gain.setValueAtTime(.0001, actx.currentTime+d);
+      g.gain.exponentialRampToValueAtTime(.35, actx.currentTime+d+.02);
+      g.gain.exponentialRampToValueAtTime(.0001, actx.currentTime+d+.2);
+      o.start(actx.currentTime+d); o.stop(actx.currentTime+d+.22);
+    });
+  }catch(e){}
+}
+document.addEventListener("touchstart", function unlock(){
+  try{ actx = actx || new (window.AudioContext||window.webkitAudioContext)(); actx.resume(); }catch(e){}
+  document.removeEventListener("touchstart", unlock);
+}, {once:true});
+
+/* ---------- Sheet: storico, statistiche, impostazioni ---------- */
+function openSheet(html){
+  $("sheet").innerHTML = html;
+  $("sheet").classList.add("on");
+  $("sheetBg").classList.add("on");
+}
+function closeSheet(){
+  $("sheet").classList.remove("on");
+  $("sheetBg").classList.remove("on");
+}
+$("sheetBg").onclick = closeSheet;
+
+function buildChart(points){
+  if(points.length < 2) return "";
+  const w=280, h=90, pad=10;
+  const vals = points.map(p => p.value);
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const range = (max - min) || 1;
+  const stepX = (w - 2*pad) / (points.length - 1);
+  const coords = points.map((p,i) => {
+    const x = pad + i*stepX;
+    const y = h - pad - ((p.value - min)/range) * (h - 2*pad);
+    return [x.toFixed(1), y.toFixed(1)];
+  });
+  const line = coords.map(c => c.join(",")).join(" ");
+  const dots = coords.map(c => `<circle cx="${c[0]}" cy="${c[1]}" r="3" fill="var(--accent)"/>`).join("");
+  return `<div class="chart-box">
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:4px">Andamento carico</div>
+    <svg viewBox="0 0 ${w} ${h}" class="chart"><polyline points="${line}" fill="none" stroke="var(--accent)" stroke-width="2"/>${dots}</svg>
+    <div class="chart-range"><span>${min} kg</span><span>${max} kg</span></div>
+  </div>`;
+}
+
+function openHistory(exId){
+  const ex = day().ex.find(x => x.id === exId);
+  const db = Store.load();
+  const entries = Object.keys(db.sessions)
+    .map(k => ({k, raw: normalizeRaw(ex, db.sessions[k][exId])}))
+    .filter(x => x.raw && x.raw.sets.some(s => s.w || s.r))
+    .sort((a,b) => a.k.localeCompare(b.k));
+
+  const todayEntry = exEntry(ex);
+  const refVariant = todayEntry ? todayEntry.variant : ex.name;
+
+  const chartPoints = entries.filter(x => x.raw.variant === refVariant).map(x => {
+    const weights = x.raw.sets.map(s => parseFloat(s.w)).filter(n => !isNaN(n));
+    return weights.length ? {date:x.k.split("__")[0], value: Math.max(...weights)} : null;
+  }).filter(Boolean);
+
+  const rows = entries.slice().reverse().slice(0,12).map(x => {
+    const sets = x.raw.sets.filter(s => s.w || s.r);
+    const weights = sets.map(s=>parseFloat(s.w)).filter(n=>!isNaN(n));
+    const topW = weights.length ? Math.max(...weights) : null;
+    const date = x.k.split("__")[0];
+    let isPR = false;
+    if(topW !== null && x.raw.variant === refVariant){
+      const bestSoFar = Math.max(...chartPoints.filter(p=>p.date<=date).map(p=>p.value), -Infinity);
+      isPR = topW === bestSoFar && chartPoints.find(p=>p.value===topW)?.date === date;
+    }
+    const setsTxt = sets.map(s => `${s.w||"–"}×${s.r||"–"}`).join("  ·  ");
+    const vol = x.raw.sets.reduce((a,s)=> a + (parseFloat(s.w)||0)*(parseFloat(s.r)||0), 0);
+    const variantTag = x.raw.variant !== ex.name ? `<span class="pr-tag" style="color:var(--muted)">· ${safe(x.raw.variant)}</span>` : "";
+    return `<div class="hist"><b>${date.split("-").reverse().join("/")}</b>${isPR?'<span class="pr-tag">🏆 PR</span>':''}${variantTag}
+            <p>${safe(setsTxt)}${vol?`  <span style="color:var(--muted)">· volume ${Math.round(vol)} kg</span>`:""}</p></div>`;
+  }).join("");
+
+  openSheet(`<h2>${safe(ex.name)}</h2><div class="sub">Ultimi allenamenti registrati${refVariant!==ex.name?` · grafico su "${refVariant}"`:""}</div>
+    ${buildChart(chartPoints)}
+    ${rows || '<div class="empty">Nessun dato ancora. Compila i campi e spunta le serie: da qui in poi vedrai i progressi.</div>'}
+    <button class="big-btn" onclick="closeSheet()">Chiudi</button>`);
+}
+
+/* ---------- Varianti / sostituzioni esercizio ---------- */
+function openVariantPicker(exId){
+  const ex = day().ex.find(x => x.id === exId);
+  const entry = exEntry(ex, true);
+  const options = [ex.name, ...(ex.variants || [])];
+  const chips = options.map(v =>
+    `<button class="variant-chip ${v===entry.variant?"active":""}" data-pick="${encodeURIComponent(v)}">${safe(v)}</button>`
+  ).join("");
+
+  openSheet(`<h2>${safe(ex.name)}</h2><div class="sub">Quale variante fai oggi? La sostituzione vale <b>solo per questa seduta</b>. Il gruppo muscolare viene suggerito dal nome quando riconosciuto: verificalo sempre.</div>
+    <div class="variant-list">${chips}</div>
+    <div style="margin-top:14px">
+      <label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:6px">Altro esercizio</label>
+      <input id="customVariant" type="text" placeholder="Scrivi il nome..." style="width:100%;height:46px;border-radius:10px;background:var(--surface-2);border:1px solid var(--line);padding:0 12px;font-size:.95rem;color:var(--text)">
+      <label style="font-size:.78rem;color:var(--muted);display:block;margin:10px 0 6px">Gruppo muscolare effettivo</label>
+      <select id="customMuscle" style="width:100%;height:46px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:0 10px">${MUSCLE_OPTIONS.map(m=>`<option ${m===(entry.muscle||ex.muscle)?"selected":""}>${safe(m)}</option>`).join("")}</select>
+      <button class="big-btn primary" id="applyCustomVariant">Sostituisci solo oggi</button>
+    </div>
+    <button class="big-btn" onclick="closeSheet()">Annulla</button>`);
+
+  document.querySelectorAll("[data-pick]").forEach(b => {
+    b.onclick = () => applyVariant(exId, decodeURIComponent(b.dataset.pick));
+  });
+  $("customVariant").addEventListener("input",()=>{
+    const detected=recognizeMuscle($("customVariant").value);
+    if(detected) $("customMuscle").value=detected;
+  });
+  $("applyCustomVariant").onclick = () => {
+    const val = $("customVariant").value.trim();
+    if(val && val.length<=110) applyVariant(exId, val, $("customMuscle").value);
+    else alert("Inserisci un nome di massimo 110 caratteri.");
+  };
+}
+function applyVariant(exId, variantName, newMuscle){
+  const ex = day().ex.find(x => x.id === exId);
+  const entry = exEntry(ex, true);
+  if(entry.variant === variantName && (!newMuscle || entry.muscle===newMuscle)){ closeSheet(); return; }
+  const hasData = entry.sets.some(s => s.w || s.r || s.d);
+  if(hasData && !confirm("Cambiare variante azzera le serie già inserite oggi per questo esercizio. Continuare?")) return;
+  entry.variant = variantName;
+  entry.muscle = newMuscle || (variantName === ex.name ? ex.muscle : (entry.muscle || ex.muscle));
+  entry.sets = Array.from({length: ex.sets}, () => ({w:"",r:"",d:false}));
+  Store.save();
+  closeSheet();
+  renderList();
+}
+
+function isoWeekRange(dateStr){
+  const d = new Date(dateStr + "T00:00:00");
+  const offset = (d.getDay() + 6) % 7; // lunedì = 0
+  const monday = new Date(d); monday.setDate(d.getDate() - offset);
+  const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
+  return [monday.toISOString().slice(0,10), sunday.toISOString().slice(0,10)];
+}
+function weeklySets(dateStr){
+  const [start,end] = isoWeekRange(dateStr);
+  const db = Store.load();
+  const totals = {}; [...new Set([...MUSCLES,...MUSCLE_OPTIONS])].forEach(m => totals[m] = 0);
+  Object.keys(db.sessions).forEach(k => {
+    const date = k.split("__")[0];
+    if(date < start || date > end) return;
+    const s = db.sessions[k];
+    Object.keys(s).forEach(exId => {
+      const muscle = (s[exId] && !Array.isArray(s[exId]) && s[exId].muscle) || MUSCLE_OF[exId];
+      if(!muscle) return;
+      if(!(muscle in totals)) totals[muscle]=0;
+      const raw = s[exId];
+      const setsArr = Array.isArray(raw) ? raw : (raw && raw.sets) || [];
+      totals[muscle] += setsArr.filter(x => x.d).length;
+    });
+  });
+  return {start, end, totals};
+}
+$("btnWeekly").onclick = () => {
+  const {start, end, totals} = weeklySets(state.date);
+  const max = Math.max(1, ...Object.values(totals));
+  const bars = Object.keys(totals).map(m => `
+    <div class="mbar">
+      <span class="mlabel">${m}</span>
+      <div class="mtrack"><i style="width:${(totals[m]/max*100).toFixed(0)}%"></i></div>
+      <span class="mval num">${totals[m]}</span>
+    </div>`).join("");
+  const hasData = Object.values(totals).some(v => v > 0);
+  openSheet(`<h2>Serie della settimana</h2>
+    <div class="week-range">${dmy(start)} – ${dmy(end)}</div>
+    <div style="margin-top:10px">${hasData ? bars : '<div class="empty">Nessuna serie completata questa settimana.</div>'}</div>
+    <button class="big-btn" onclick="closeSheet()">Chiudi</button>`);
+};
+
+$("btnSettings").onclick = () => {
+  const db = Store.load();
+  const n = Object.keys(db.sessions).length;
+  openSheet(`<h2>Impostazioni</h2>
+    <div class="sub">${n} allenamenti salvati su questo telefono${Store.persistent?"":" (solo per questa sessione)"}</div>
+    <button class="big-btn primary" onclick="exportMarkdown()">Esporta scheda (Markdown)</button>
+    <p class="warn" style="margin-top:4px">Il piano di allenamento in testo semplice — copiato negli appunti e scaricato, pronto da incollare a un'AI o condividere.</p>
+    <button class="big-btn" onclick="exportData()">Salva backup dati (.json)</button>
+    <button class="big-btn" onclick="importData()">Importa backup</button>
+    <button class="big-btn" onclick="openProgramManager()">Gestisci schede e JSON</button>
+    <button class="big-btn" onclick="openProfile()">Profilo atleta</button>
+    <button class="big-btn danger" onclick="resetDay()">Azzera l'allenamento di oggi</button>
+    <button class="big-btn danger" onclick="wipe()">Cancella tutto lo storico</button>
+    <p class="warn">${Store.persistent
+      ? "I dati restano sul telefono, anche offline. Se cancelli i dati del browser vengono persi: fai un backup ogni tanto."
+      : "Questo browser non sta salvando i dati in modo permanente: apri il file da una pagina web (non da file://) o usa il backup manuale."}</p>
+    <button class="big-btn" onclick="closeSheet()">Chiudi</button>`);
+};
+
+function buildMarkdownExport(){
+  let md = `# Scheda Palestra\n\n`;
+  PROGRAM.forEach(d => {
+    md += `## ${d.title} — ${d.sub}\n\n`;
+    if(d.note) md += `> ${d.note}\n\n`;
+    md += `| Esercizio | Serie × Reps | Carico | Recupero | Indicazione |\n|---|---|---|---|---|\n`;
+    d.ex.forEach(ex => {
+      const variants = ex.variants && ex.variants.length ? ` (varianti: ${ex.variants.join(", ")})` : "";
+      const note = ex.tip.replace(/\|/g, "-");
+      md += `| ${ex.name}${variants} | ${ex.sets}×${ex.reps} | ${ex.loadTxt} | ${fmt(ex.rest)} | ${note} |\n`;
+    });
+    md += "\n";
+  });
+  return md;
+}
+function exportMarkdown(){
+  const md = buildMarkdownExport();
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(md).then(() => showToast("Markdown copiato negli appunti")).catch(() => {});
+  }
+  const blob = new Blob([md], {type:"text/markdown"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "scheda-palestra.md";
+  a.click();
+}
+
+function exportData(){
+  const blob = new Blob([JSON.stringify({sessions:Store.load().sessions,profile:getProfile(),restOverrides:getRestOverrides(),activeProgram:localStorage.getItem(PKEY)?JSON.parse(localStorage.getItem(PKEY)):null})], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "palestra-backup-" + todayISO() + ".json";
+  a.click();
+}
+function importData(){
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.accept = "application/json";
+  inp.onchange = () => {
+    const f = inp.files[0]; if(!f) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      try{
+        const obj = JSON.parse(rd.result);
+        if(!obj.sessions) throw 0;
+        const cur = Store.load();
+        Store.replace({sessions: Object.assign({}, cur.sessions, obj.sessions)});
+        if(obj.profile && typeof obj.profile==="object") localStorage.setItem(PROFILE_KEY,JSON.stringify(obj.profile));
+        if(obj.restOverrides && typeof obj.restOverrides==="object") localStorage.setItem(REST_OVERRIDES_KEY,JSON.stringify(obj.restOverrides));
+        if(obj.activeProgram){validateProgram(obj.activeProgram,true); localStorage.setItem(PKEY,JSON.stringify(obj.activeProgram)); loadProgram();state.dayId=PROGRAM[0].id;renderDays();}
+        closeSheet(); renderList();renderWelcome();
+      }catch(e){ alert("File non valido: serve un backup creato da questa app."); }
+    };
+    rd.readAsText(f);
+  };
+  inp.click();
+}
+function resetDay(){
+  if(!confirm("Azzeri i dati di " + dmy(state.date) + "?")) return;
+  const db = Store.load();
+  delete db.sessions[sessionKey()];
+  Store.save(); closeSheet(); renderList();
+}
+function wipe(){
+  if(!confirm("Cancelli tutto lo storico? L'operazione non è reversibile.")) return;
+  Store.replace({sessions:{}});
+  closeSheet(); renderList();
+}
+
+
+
+/* ---------- v2.2: navigazione e onboarding ---------- */
+function setActiveNav(name){document.querySelectorAll("[data-nav]").forEach(el=>el.classList.toggle("active",el.dataset.nav===name));}
+function renderWelcome(){
+  const p=getProfile();
+  const ready=p.goal && Array.isArray(p.trainingWeekdays)&&p.trainingWeekdays.length;
+  $("welcomeBox").innerHTML=ready?"":`<div class="welcome"><h2>Benvenuto su Palestra Coach</h2><p>La scheda d'esempio è già disponibile. Per crearne una personale con ChatGPT, configura prima obiettivi e giorni di allenamento.</p><button id="welcomeStart">Configura la mia scheda</button></div>`;
+  const b=$("welcomeStart");if(b)b.onclick=()=>openSetupGuide(1);
+}
+function openSetupGuide(step=1){
+ const steps=`<div class="steps">${[1,2,3].map(i=>`<i class="${i<=step?"on":""}"></i>`).join("")}</div>`;
+ if(step===1){
+  openSheet(`<h2>1 · Profilo e obiettivi</h2><div class="sub">Il prompt per l'AI userà queste informazioni. Nessuna modifica alla scheda attuale finché non importi un nuovo programma.</div>${steps}<p>Indica almeno obiettivo, priorità specifica e giorni di allenamento. Nel profilo puoi anche modificare il recupero predefinito.</p><button class="big-btn primary" id="guideProfile">Compila il profilo</button><button class="big-btn" id="guideNext">Ho già compilato: avanti</button>`);
+  $("guideProfile").onclick=()=>openProfile(true);$("guideNext").onclick=()=>openSetupGuide(2);return;
+ }
+ if(step===2){
+  const p=getProfile();if(!p.goal||!Array.isArray(p.trainingWeekdays)||!p.trainingWeekdays.length){alert("Prima compila obiettivo e giorni nel profilo.");openSetupGuide(1);return;}
+  openSheet(`<h2>2 · Genera la scheda con ChatGPT</h2>${steps}<div class="sub">Il prompt include obiettivi, priorità, giorni precisi, durata, attrezzatura, preferenze, recuperi e formato JSON compatibile.</div><button class="big-btn primary" id="guideCopy">Copia il prompt personalizzato</button><button class="big-btn" id="guideChatGPT">Apri ChatGPT</button><button class="big-btn" id="guideStep3">Ho ottenuto il JSON: importa</button><button class="big-btn" onclick="openSetupGuide(1)">Indietro</button>`);
+  $("guideCopy").onclick=copyProfilePrompt;
+  $("guideChatGPT").onclick=()=>window.open("https://chatgpt.com/","_blank","noopener,noreferrer");
+  $("guideStep3").onclick=()=>openSetupGuide(3);return;
+ }
+ openSheet(`<h2>3 · Importa la nuova scheda</h2>${steps}<div class="sub">Incolla il JSON restituito dall'AI oppure carica il file. Prima di sostituire la scheda mostreremo un'anteprima.</div><button class="big-btn primary" id="guidePaste">Incolla il JSON</button><button class="big-btn" id="guideFile">Carica file JSON</button><button class="big-btn" onclick="openSetupGuide(2)">Indietro</button>`);
+ $("guidePaste").onclick=openPasteProgram;
+ $("guideFile").onclick=selectProgramFile;
+}
+function copyProfilePrompt(){
+ const p=getProfile();const {birthDate,nickname,age:oldAge,...safeProfile}=p;
+ // Informazioni facoltative potenzialmente sensibili non vengono trasmesse automaticamente.
+ const {limitations,...profileWithoutHealth}=safeProfile;
+ const txt=COACH_PROMPT+JSON.stringify({...profileWithoutHealth,age:ageFromDOB(birthDate)??(oldAge||null),limitations:"Non condivise automaticamente. L'utente può aggiungerle nel prompt se desidera."},null,2);
+ if(navigator.clipboard && navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(()=>showToast("Prompt copiato")).catch(()=>showPromptText(txt));}
+ else showPromptText(txt);
+}
+function showPromptText(txt){openSheet(`<h2>Prompt per ChatGPT</h2><p class="warn">Seleziona e copia il testo seguente.</p><textarea readonly id="promptTxt" rows="16" style="width:100%;padding:12px;background:var(--surface-2);color:var(--text);border:1px solid var(--line);border-radius:10px"></textarea><button class="big-btn" onclick="openSetupGuide(2)">Indietro</button>`);$("promptTxt").value=txt;}
+function selectProgramFile(){
+ const inp=document.createElement("input");inp.type="file";inp.accept=".json,application/json";
+ inp.onchange=async()=>{try{const f=inp.files?.[0];if(!f)return;if(f.size>1024*1024)throw Error("File troppo grande (limite 1 MB).");await importProgramText(await f.text());}catch(e){alert("Importazione non riuscita: "+e.message);}};inp.click();
+}
+function openPasteProgram(){openSheet(`<h2>Incolla JSON della scheda</h2><div class="sub">Incolla il JSON completo, senza altri testi.</div><textarea id="programJson" rows="10" style="width:100%;padding:12px;background:var(--surface-2);color:var(--text);border:1px solid var(--line);border-radius:10px;font:12px monospace"></textarea><button class="big-btn primary" id="confirmPaste">Verifica e visualizza anteprima</button><button class="big-btn" onclick="openSetupGuide(3)">Indietro</button>`);$("confirmPaste").onclick=()=>importProgramText($("programJson").value);}
+document.querySelectorAll("[data-nav]").forEach(b=>b.onclick=()=>{
+ const name=b.dataset.nav;setActiveNav(name);
+ if(name==="workout"){closeSheet();window.scrollTo({top:0,behavior:"smooth"});}
+ if(name==="program")openProgramManager();
+ if(name==="stats")$("btnWeekly").click();
+ if(name==="profile")openProfile();
+});
+
+/* ---------- PROFILI / PROGRAMMI / IA ---------- */
+const EXERCISE_MUSCLES = [
+  [/lat machine|lat pulldown|pull down|pulldown|trazioni|pull.?up|chin.?up|pulley|low row|rematore|t.?bar|pullover/i,"Dorso"],
+  [/chest press|panca|croci|push.?up|piegamenti|pec deck|dip/i,"Petto"],
+  [/alzate lateral|alzate posterior|shoulder press|military|face pull|deltoid/i,"Spalle"],
+  [/curl|bicipit|hammer/i,"Bicipiti"],
+  [/pushdown|tricipit|french press/i,"Tricipiti"],
+  [/leg extension|pendulum|hack squat|leg press|squat/i,"Quadricipiti"],
+  [/leg curl|femoral/i,"Femorali"],
+  [/hip thrust|glute bridge/i,"Glutei"],
+  [/adductor|adduttor/i,"Adduttori"],
+  [/calf|polpacc/i,"Polpacci"],
+  [/crunch|plank|addomin/i,"Core"]
+];
+function recognizeMuscle(name){return EXERCISE_MUSCLES.find(([re])=>re.test(name))?.[1]||null;}
+const COACH_PROMPT = `Agisci come un preparatore atletico basato sulle evidenze. Crea una scheda personalizzata in base al profilo che ti fornirò. Non formulare diagnosi e non dichiarare sicuri esercizi per eventuali infortuni.
+Restituisci SOLO un oggetto JSON valido, senza markdown o testo aggiuntivo, con questa struttura:
+{"schemaVersion":"1.0","program":{"name":"Nome programma","days":[{"name":"Lunedì - Pull","tab":"Lun","weekday":1,"sub":"Focus dorsali","note":"Indicazioni facoltative","exercises":[{"name":"Lat machine presa neutra","sets":3,"reps":{"min":8,"max":12},"rir":2,"restSeconds":180,"muscle":"Dorso","notes":"Consigli tecnici sintetici","variants":["Lat machine convergente"]}]}]}}
+Usa solo questi valori per muscle: Petto, Dorso, Spalle, Bicipiti, Tricipiti, Quadricipiti, Femorali, Glutei, Adduttori, Polpacci, Core, Collo, Altro. Ogni giornata deve avere weekday: 1=lunedì, 2=martedì, 3=mercoledì, 4=giovedì, 5=venerdì, 6=sabato, 7=domenica. Rispetta ESATTAMENTE i giorni selezionati nel profilo, con una giornata per ogni giorno disponibile. Da 1 a 7 giornate e da 1 a 25 esercizi/giorno, serie 1–10, recupero 15–600 secondi. Evita esercizi contro le limitazioni che descriverò, segnala la necessità di valutazione sanitaria se pertinente e non inventare dati. Non includere nome, data di nascita o dati sanitari nel JSON della scheda. Le limitazioni servono soltanto per scegliere esercizi appropriati: se ci sono segnala che serve parere professionale, non formulare diagnosi. Considera anche il campo goalDetails, la durata massima, attrezzatura e preferenze. Imposta restSeconds per ogni esercizio; se restMode è global, usa defaultRestSeconds come preferenza di partenza, salvo giustificazioni tecniche.
+
+PROFILO E PREFERENZE DA CONSIDERARE (scrivo qui sotto):
+`;
+function downloadJson(obj,name){const blob=new Blob([JSON.stringify(obj,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+function openProfile(fromGuide=false){
+  const p=getProfile();
+  const field=(label,key,type="text")=>`<label class="profile-field">${label}<input id="pf_${key}" type="${type}" value="${safeAttr(p[key]??"")}" maxlength="100"></label>`;
+  const selected=Array.isArray(p.trainingWeekdays)?p.trainingWeekdays.map(Number):PROGRAM.map(d=>d.weekday).filter(Boolean);
+  const dayNames=["Lun","Mar","Mer","Gio","Ven","Sab","Dom"];
+  const age=ageFromDOB(p.birthDate);
+  openSheet(`<h2>Profilo atleta</h2><div class="sub">I dati rimangono su questo dispositivo. Non vengono pubblicati su GitHub.</div>
+    ${field("Nome o nickname", "nickname")}
+    ${field("Data di nascita (età calcolata automaticamente)","birthDate","date")}
+    <p class="warn" id="agePreview">${age!==null?`Età attuale: ${age} anni.`:(p.age?`Età nella vecchia versione: ${safe(p.age)} anni. Inserisci la data di nascita per aggiornarla automaticamente.`:"Inserisci la data di nascita per calcolare l'età.")}</p>
+    ${field("Altezza (cm)","height","number")}${field("Peso (kg)","weight","number")}
+    <label class="profile-field">Sesso (facoltativo)<select id="pf_sex">${["Non specificato","Uomo","Donna","Altro"].map(x=>`<option ${x===(p.sex||"Non specificato")?"selected":""}>${x}</option>`).join("")}</select></label>
+    <label class="profile-field">Obiettivo principale<select id="pf_goal">${["Ipertrofia","Forza","Ricondizionamento","Resistenza","Forma generale"].map(x=>`<option ${x===p.goal?"selected":""}>${x}</option>`).join("")}</select></label>
+    ${field("Priorità muscolare / sportiva", "priority")}
+    <label class="profile-field">Obiettivo specifico (descrivilo liberamente)<textarea id="pf_goalDetails" maxlength="500" placeholder="Es. voglio sviluppare la larghezza della schiena senza trascurare il resto">${safe(p.goalDetails||"")}</textarea></label>
+    ${field("Esperienza (anni)","experience","number")}
+    <label class="profile-field">Durata massima per seduta (minuti)<input id="pf_durationMinutes" type="number" min="20" max="240" value="${safeAttr(p.durationMinutes||75)}"></label>
+    <label class="profile-field">Attrezzatura disponibile<select id="pf_equipment">${["Palestra completa","Palestra essenziale","Home gym","Corpo libero"].map(x=>`<option ${x===(p.equipment||"Palestra completa")?"selected":""}>${x}</option>`).join("")}</select></label>
+    <label class="profile-field">Esercizi preferiti o da evitare<textarea id="pf_preferences" maxlength="500" placeholder="Es. preferisco macchinari, non voglio squat libero">${safe(p.preferences||"")}</textarea></label>
+    <div class="profile-field">Giorni disponibili per allenarti <span style="color:var(--muted)">(seleziona quelli abituali)</span><div class="profile-days">${dayNames.map((d,i)=>`<label><input type="checkbox" data-training-weekday="${i+1}" ${selected.includes(i+1)?"checked":""}> ${d}</label>`).join("")}</div></div>
+    <label class="profile-field">Recupero tra le serie: come preferisci gestirlo?
+      <select id="pf_restMode">
+        <option value="program" ${p.restMode!=="global"?"selected":""}>Usa i tempi della scheda importata</option>
+        <option value="global" ${p.restMode==="global"?"selected":""}>Usa il mio tempo predefinito per tutti</option>
+      </select>
+    </label>
+    <label class="profile-field">Tempo predefinito (secondi, 15–600)<input id="pf_defaultRestSeconds" type="number" min="15" max="600" step="15" value="${safeAttr(p.defaultRestSeconds||180)}"></label>
+    <p class="warn">Puoi comunque cambiare il recupero di ogni esercizio dal pulsante ⏱ Recupero. Le modifiche specifiche prevalgono sul tempo predefinito.</p>
+    ${field("Preferenze e limitazioni (facoltativo)","limitations")}
+    <p class="warn">I giorni del profilo descrivono la tua disponibilità: <b>non modificano automaticamente la scheda</b>. Importa una scheda con lo stesso numero di giornate e i rispettivi weekday. Non inserire dati sanitari sensibili se non desideri conservarli sul telefono.</p>
+    <button class="big-btn primary" id="saveProfile">Salva profilo</button><button class="big-btn" onclick="closeSheet()">Annulla</button>`);
+  $("pf_birthDate").addEventListener("input",e=>{const a=ageFromDOB(e.target.value);$("agePreview").textContent=a===null?"Inserisci una data di nascita valida e non futura.":`Età attuale: ${a} anni.`;});
+  $("saveProfile").onclick=()=>{
+    const vals={};["nickname","birthDate","height","weight","sex","goal","priority","experience","limitations"].forEach(k=>vals[k]=String($("pf_"+k).value).slice(0,100));
+    if(vals.birthDate && ageFromDOB(vals.birthDate)===null){alert("Data di nascita non valida.");return;}
+    vals.goalDetails=$("pf_goalDetails").value.slice(0,500);
+    vals.preferences=$("pf_preferences").value.slice(0,500);
+    vals.durationMinutes=Number($("pf_durationMinutes").value);
+    vals.equipment=$("pf_equipment").value;
+    vals.restMode=$("pf_restMode").value;
+    vals.defaultRestSeconds=Number($("pf_defaultRestSeconds").value);
+    if(!Number.isInteger(vals.defaultRestSeconds)||vals.defaultRestSeconds<15||vals.defaultRestSeconds>600){alert("Recupero predefinito: tra 15 e 600 secondi.");return;}
+    if(!Number.isInteger(vals.durationMinutes)||vals.durationMinutes<20||vals.durationMinutes>240){alert("Durata: indica un valore tra 20 e 240 minuti.");return;}
+    vals.trainingWeekdays=Array.from(document.querySelectorAll("[data-training-weekday]:checked")).map(e=>Number(e.dataset.trainingWeekday));
+    if(!vals.trainingWeekdays.length){alert("Seleziona almeno un giorno di allenamento.");return;}
+    vals.days=String(vals.trainingWeekdays.length);
+    try{localStorage.setItem(PROFILE_KEY,JSON.stringify(vals));showToast("Profilo salvato");closeSheet();renderWelcome();renderList();if(fromGuide===true)openSetupGuide(2);}catch(e){alert("Impossibile salvare il profilo: "+e.message);}
+  };
+}
+
+function openProgramManager(){
+  openSheet(`<h2>Gestione schede</h2><div class="sub">Programma attivo: ${safe(programName())} · ${PROGRAM.length} giornate. Ogni dispositivo conserva i propri dati.</div>
+    <button class="big-btn primary" id="startGuide">Crea / importa scheda (guida in 3 passaggi)</button>
+    <button class="big-btn" id="importProgram">Importa JSON da file</button>
+    <button class="big-btn" id="pasteProgram">Incolla JSON</button>
+    <button class="big-btn" id="exportProgram">Esporta scheda JSON</button>
+    <button class="big-btn" id="copyPrompt">Copia prompt per ChatGPT / Gemini / coach</button>
+    <button class="big-btn" id="resetProgram">Ripristina scheda di esempio</button>
+    <p class="warn">L'importazione sostituisce la scheda visualizzata, non cancella i precedenti allenamenti. Esegui comunque un backup prima di modifiche importanti. Le sostituzioni di esercizio fatte durante l'allenamento valgono solo per quella data.</p>
+    <button class="big-btn" onclick="closeSheet()">Chiudi</button>`);
+  $("startGuide").onclick=()=>openSetupGuide(1);
+  $("importProgram").onclick=selectProgramFile;
+  $("pasteProgram").onclick=openPasteProgram;
+  $("exportProgram").onclick=()=>downloadJson({schemaVersion:"1.0",program:{name:programName(),days:PROGRAM.map(d=>({name:d.title,tab:d.tab,weekday:d.weekday,sub:d.sub,note:d.note,exercises:d.ex.map(e=>({name:e.name,sets:e.sets,reps:e.reps,rir:e.rir??2,restSeconds:e.rest,muscle:e.muscle,notes:e.tip,variants:e.variants||[],bw:!!e.bw}))}))}},"scheda-personale.json");
+  $("copyPrompt").onclick=copyProfilePrompt;
+  $("resetProgram").onclick=()=>{if(!confirm("Ripristinare la scheda di esempio? Lo storico rimarrà salvato."))return;PROGRAM=JSON.parse(JSON.stringify(DEFAULT_PROGRAM));window.ACTIVE_PROGRAM_NAME="Scheda di esempio";localStorage.removeItem(PKEY);rebuildMuscles();state.dayId=PROGRAM[0].id;closeSheet();renderDays();renderList();};
+}
+async function importProgramText(txt){
+  try{
+    const obj=JSON.parse(txt.replace(/^\uFEFF/,""));
+    const checkedDays=validateProgram(obj,true);
+    const p=getProfile();
+    const declared=Array.isArray(p.trainingWeekdays)?p.trainingWeekdays.map(Number):null;
+    if(declared){
+      const imported=checkedDays.map(d=>d.weekday).filter(Boolean);
+      const mismatch=declared.length!==checkedDays.length || imported.length!==checkedDays.length || imported.some(x=>!declared.includes(x));
+      if(mismatch && !confirm(`I giorni della scheda non coincidono con quelli scelti nel profilo. Profilo: ${declared.join(", ")} (1=lun ... 7=dom); scheda: ${imported.length?imported.join(", "):"non specificati"}. Importare comunque?`))return;
+    }
+    const name=String((obj.program||obj).name||"Scheda personalizzata");
+    const dayNames=["","Lunedì","Martedì","Mercoledì","Giovedì","Venerdì","Sabato","Domenica"];
+    const total=checkedDays.reduce((n,d)=>n+d.ex.length,0);
+    const blocks=checkedDays.map(d=>`<div class="preview-day"><b>${safe(dayNames[d.weekday]||d.title)} · ${safe(d.title)}</b><small>${d.ex.length} esercizi · ${d.ex.reduce((n,e)=>n+e.sets,0)} serie</small><small>${d.ex.map(e=>`${safe(e.name)} (${e.sets}×${safe(e.reps)}, ${fmt(e.rest)})`).join(" · ")}</small></div>`).join("");
+    openSheet(`<h2>Anteprima della scheda</h2><div class="sub">${safe(name)} · ${checkedDays.length} giorni · ${total} esercizi. Controlla tutto prima di confermare.</div>${blocks}<p class="warn">L'importazione sostituirà la scheda attiva. Il vecchio storico non sarà cancellato, ma i nuovi esercizi avranno ID separati.</p><button class="big-btn primary" id="approveProgram">Conferma e importa</button><button class="big-btn" onclick="openSetupGuide(3)">Annulla</button>`);
+    $("approveProgram").onclick=()=>{try{setProgram(obj);closeSheet();renderWelcome();showToast("Scheda importata correttamente");setActiveNav("workout");}catch(err){alert("Importazione non riuscita: "+err.message);}};
+  }catch(e){alert("JSON non valido: "+e.message);}
+}
+$("btnProfile").onclick=openProfile;
+$("btnProgram").onclick=openProgramManager;
+
+/* ---------- Avvio ---------- */
+$("dateInput").value = state.date;
+selectDayForDate();
+renderWelcome();
+
+if("serviceWorker" in navigator){
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  });
+}
+</script>
+</body>
+</html>

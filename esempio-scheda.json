@@ -1,0 +1,69 @@
+{
+  "schemaVersion": "1.0",
+  "program": {
+    "name": "Esempio: full body 2 giorni",
+    "days": [
+      {
+        "name": "Giorno 1 - Full body",
+        "tab": "G1",
+        "sub": "Esempio modificabile",
+        "exercises": [
+          {
+            "name": "Leg press",
+            "sets": 3,
+            "reps": {
+              "min": 8,
+              "max": 12
+            },
+            "rir": 2,
+            "restSeconds": 180,
+            "muscle": "Quadricipiti",
+            "notes": "Controlla il movimento"
+          },
+          {
+            "name": "Chest press",
+            "sets": 3,
+            "reps": {
+              "min": 8,
+              "max": 12
+            },
+            "rir": 2,
+            "restSeconds": 180,
+            "muscle": "Petto",
+            "notes": "ROM confortevole"
+          }
+        ],
+        "weekday": 1
+      },
+      {
+        "name": "Giorno 2 - Full body",
+        "tab": "G2",
+        "exercises": [
+          {
+            "name": "Lat machine presa neutra",
+            "sets": 3,
+            "reps": {
+              "min": 8,
+              "max": 12
+            },
+            "rir": 2,
+            "restSeconds": 180,
+            "muscle": "Dorso"
+          },
+          {
+            "name": "Leg curl seduto",
+            "sets": 3,
+            "reps": {
+              "min": 10,
+              "max": 15
+            },
+            "rir": 2,
+            "restSeconds": 180,
+            "muscle": "Femorali"
+          }
+        ],
+        "weekday": 4
+      }
+    ]
+  }
+}
