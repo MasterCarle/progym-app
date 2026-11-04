@@ -6,11 +6,11 @@
 <meta name="theme-color" content="#161A21">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Palestra">
+<meta name="apple-mobile-web-app-title" content="proGYM">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<title>Scheda Palestra · Focus Dorso</title>
+<title>proGYM — Allenamento intelligente</title>
 <style>
 :root{
   --bg:#161A21;
@@ -302,58 +302,12 @@ body{padding-bottom:calc(155px + env(safe-area-inset-bottom))}
    1. LA SCHEDA
    muscle: gruppo muscolare usato per il riepilogo settimanale
    ========================================================= */
-let PROGRAM = [
-  {
-    id:"lun", weekday:1, tab:"Lun", tabSub:"Pull A", title:"Pull A · Dorso", sub:"Lunedì · focus dorsali",
-    note:"Focus larghezza dorsali. Recupero 3:00 dopo OGNI SERIE, non dopo ogni singola ripetizione. 2–3 RIR sulle tirate; evita il cedimento. Interrompi o adatta se torna dolore alla spalla.",
-    ex:[
-      {"id": "n_l_lat", "name": "Lat machine triangolo V", "sets": 3, "reps": "8-12", "load": "heavy", "loadTxt": "Impegnativo", "rest": 180, "muscle": "Dorso", "tip": "RIR 2. Riferimento recente 73 kg, solo se restano tecnica e RIR corretti. Controlla la risalita, senza appenderti passivamente."} ,
-      {"id": "n_l_row", "name": "Rematore manubri su panca 30°", "sets": 3, "reps": "8-12", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Dorso", "tip": "RIR 2. Petto sostenuto, traiettoria naturale e gomiti senza eccessiva estensione dietro il busto."} ,
-      {"id": "n_l_pulley", "name": "Pulley unilaterale", "sets": 2, "reps": "10-12", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Dorso", "tip": "RIR 2. Gomito verso anca, tronco stabile. Serie per lato; recupero 3 minuti al termine della serie bilaterale."} ,
-      {"id": "n_l_curl", "name": "Curl macchina", "sets": 2, "reps": "10-12", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Bicipiti", "tip": "RIR 1–2. Hai riferito 70–80 lb sulla macchina: registra il valore in kg o converti prima di inserirlo (70–80 lb ≈ 32–36 kg)."} ,
-      {"id": "n_l_hyper", "name": "Iperestensioni", "sets": 2, "reps": "10-15", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Femorali", "tip": "RIR 2. Mantieni una traiettoria controllata; interrompi se senti la zona lombare in modo anomalo."} ,
-      {"id": "n_l_crunch", "name": "Crunch al cavo / macchina", "sets": 2, "reps": "12-15", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Core", "tip": "RIR 1–2. Movimento controllato, evita slanci."} ,
-    ]
-  },
-  {
-    id:"mar", weekday:2, tab:"Mar", tabSub:"Push", title:"Push · Petto/Spalle", sub:"Martedì · spinta controllata",
-    note:"Le spinte inclinate e la chest press sono entrambe già testate. Non aumentare insieme volume, carico e vicinanza al cedimento. 3:00 di recupero fra tutte le serie.",
-    ex:[
-      {"id": "n_m_db", "name": "Spinte manubri panca inclinata 15–30°", "sets": 3, "reps": "8-12", "load": "heavy", "loadTxt": "Impegnativo", "rest": 180, "muscle": "Petto", "tip": "RIR 2–3. Riferimento recente 20 kg per manubrio, 8–10 ripetizioni, circa RIR 4. Progredisci prima nelle ripetizioni."} ,
-      {"id": "n_m_chest", "name": "Chest press inclinata", "sets": 2, "reps": "8-12", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Petto", "tip": "RIR 2–3. Riferimento 40 kg × 8–9 ripetizioni; conserva solo se senza fastidio e con il RIR previsto."} ,
-      {"id": "n_m_lateral", "name": "Alzate laterali cavo basso (pollice in alto)", "sets": 2, "reps": "12-15", "load": "light", "loadTxt": "Controllato", "rest": 180, "muscle": "Spalle", "tip": "RIR 3. Variante tollerata a 6,8 kg: rimani nel ROM confortevole, senza inseguire subito carichi maggiori."} ,
-      {"id": "n_m_rear", "name": "Alzate posteriori su panca inclinata 45°", "sets": 2, "reps": "12-15", "load": "light", "loadTxt": "Controllato", "rest": 180, "muscle": "Spalle", "tip": "RIR 2–3. Presa comoda e ROM tollerato; se provoca fastidio, ometti e parlane con il fisioterapista."} ,
-      {"id": "n_m_tri_ext", "name": "Estensioni tricipiti al cavo (busto flesso)", "sets": 2, "reps": "10-15", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Tricipiti", "tip": "RIR 2. Esegui la variante già presente nel programma adattato."} ,
-      {"id": "n_m_pushdown", "name": "Pushdown tricipiti", "sets": 2, "reps": "10-15", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Tricipiti", "tip": "RIR 2. Polsi stabili, gomiti controllati."} ,
-    ]
-  },
-  {
-    id:"gio", weekday:4, tab:"Gio", tabSub:"Lower", title:"Lower · Gambe", sub:"Giovedì · gambe e addome",
-    note:"Conserviamo gli esercizi che già esegui, aggiungendo polpacci e addome. Niente squat libero o stacchi con bilanciere. Recupero sempre 3:00.",
-    ex:[
-      {"id": "n_g_pend", "name": "Pendulum squat", "sets": 3, "reps": "8-12", "load": "heavy", "loadTxt": "Impegnativo", "rest": 180, "muscle": "Quadricipiti", "tip": "RIR 1–2. Mantieni una presa che non dia fastidio alla spalla. Escursione controllata."} ,
-      {"id": "n_g_curl", "name": "Leg curl seduto", "sets": 3, "reps": "10-15", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Femorali", "tip": "RIR 1–2. Eccentrica controllata."} ,
-      {"id": "n_g_ext", "name": "Leg extension", "sets": 3, "reps": "10-15", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Quadricipiti", "tip": "RIR 1. Controlla salita e discesa."} ,
-      {"id": "n_g_add", "name": "Adductor machine (chiusure)", "sets": 2, "reps": "12-15", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Adduttori", "tip": "RIR 1–2. Movimento senza rimbalzi."} ,
-      {"id": "n_g_calf", "name": "Calf raise macchina", "sets": 3, "reps": "10-15", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Polpacci", "tip": "RIR 1. Escursione controllata e pausa in allungamento."} ,
-      {"id": "n_g_abs", "name": "Crunch macchina / cavo", "sets": 3, "reps": "10-15", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Core", "tip": "RIR 1–2. Evita di tirare con spalle e braccia."} ,
-    ]
-  },
-  {
-    id:"ven", weekday:5, tab:"Ven", tabSub:"Upper B", title:"Upper B · Dorso", sub:"Venerdì · trazioni e richiami",
-    note:"Trazioni supine 3×10 già tollerate: nessuna zavorra per ora. 3:00 di recupero dopo ogni serie. Valuta la spalla anche il giorno seguente.",
-    ex:[
-      {"id": "n_v_pullup", "name": "Trazioni supine a corpo libero", "sets": 3, "reps": "8-10", "load": "heavy", "loadTxt": "Impegnativo", "rest": 180, "muscle": "Dorso", "tip": "RIR 2–3. Hai completato 3×10 senza dolore. Non aggiungere zavorra per ora; evita la discesa completamente passiva.", "bw": true} ,
-      {"id": "n_v_row", "name": "Low row macchina", "sets": 3, "reps": "8-12", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Dorso", "tip": "RIR 2. Gomiti abbastanza vicini ai fianchi, ROM confortevole."} ,
-      {"id": "n_v_pushups", "name": "Push-up", "sets": 3, "reps": "8-15", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Petto", "tip": "RIR 2–3. Mantieni la tecnica già tollerata, scapole libere di muoversi.", "bw": true, "variants": ["Chest press macchina (solo se tollerata)"]} ,
-      {"id": "n_v_curl", "name": "Curl al cavo basso", "sets": 2, "reps": "10-12", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Bicipiti", "tip": "RIR 2. Nessun dolore alla spalla; controlla la fase di ritorno."} ,
-      {"id": "n_v_pushdown", "name": "Pushdown tricipiti", "sets": 2, "reps": "10-15", "load": "medium", "loadTxt": "Moderato", "rest": 180, "muscle": "Tricipiti", "tip": "RIR 2. Esecuzione controllata."} ,
-    ]
-  },
-];
+// Un'installazione nuova non ha alcuna scheda preimpostata.
+// Ogni utente importa la propria scheda (o la crea tramite AI).
+let PROGRAM = [];
 const MUSCLES = ["Petto","Dorso","Spalle","Bicipiti","Tricipiti","Quadricipiti","Femorali","Adduttori","Polpacci","Core","Collo"];
 let MUSCLE_OF = {};
-const DEFAULT_PROGRAM = JSON.parse(JSON.stringify(PROGRAM));
+
 function rebuildMuscles(){ MUSCLE_OF = {}; PROGRAM.forEach(d => d.ex.forEach(e => MUSCLE_OF[e.id] = e.muscle)); }
 rebuildMuscles();
 
@@ -424,13 +378,20 @@ function loadProgram(){
   rebuildMuscles();
 }
 function saveProgram(){localStorage.setItem(PKEY,JSON.stringify({schemaVersion:"1.0",program:{name:programName(),days:PROGRAM}}));}
-function programName(){return window.ACTIVE_PROGRAM_NAME || "Scheda di esempio";}
+function programName(){return window.ACTIVE_PROGRAM_NAME || "Nessuna scheda caricata";}
 function setProgram(obj){
   const clean = validateProgram(obj, true);
   const name = String((obj.program && obj.program.name)||obj.name||"Scheda personalizzata").slice(0,80);
   // Identificativi diversi per ogni importazione: nessuna attribuzione erronea dello storico.
-  const prefix = "imp" + Date.now().toString(36) + "_";
-  clean.forEach((d,i)=>{d.id=prefix+"d"+i; d.ex.forEach((e,j)=>e.id=prefix+"e"+i+"_"+j);});
+  const sessions=Object.values(Store.load().sessions||{});
+  const historicalIds=new Set(sessions.flatMap(s=>Object.keys(s||{})));
+  const matches=clean.flatMap(d=>d.ex).filter(e=>historicalIds.has(e.id)).length;
+  // Ripristino esplicito per i vecchi utenti: mantiene gli ID solo con una corrispondenza storica reale.
+  const restoreIds = obj.program?.restoreExistingIds===true && matches>=2;
+  if(!restoreIds){
+    const prefix = "imp" + Date.now().toString(36) + "_";
+    clean.forEach((d,i)=>{d.id=prefix+"d"+i; d.ex.forEach((e,j)=>e.id=prefix+"e"+i+"_"+j);});
+  }
   PROGRAM=clean; window.ACTIVE_PROGRAM_NAME=name;
   saveProgram(); rebuildMuscles(); state.dayId=PROGRAM[0].id; renderDays(); renderList();
 }
@@ -474,7 +435,7 @@ function validateProgram(obj, rejectEmpty){
   return result;
 }
 loadProgram();
-if(!PROGRAM.some(d=>d.id===state.dayId)) state.dayId=PROGRAM[0].id;
+if(PROGRAM.length && !PROGRAM.some(d=>d.id===state.dayId)) state.dayId=PROGRAM[0].id;
 function guessDay(){ const map = {1:"lun",2:"mar",4:"gio",5:"ven"}; return map[new Date().getDay()] || "lun"; }
 const day = () => PROGRAM.find(d => d.id === state.dayId);
 function weekdayFromISO(iso){
@@ -599,6 +560,16 @@ function renderDays(){
 
 function renderList(){
   const d = day();
+  if(!d){
+    $("dayTitle").childNodes[0].nodeValue="La tua scheda";
+    $("daySub").textContent="Nessun programma importato";
+    $("dayNote").innerHTML="";
+    $("list").innerHTML=`<div class="welcome"><h2>Inizia con la tua scheda</h2><p>Questa app non include programmi di altre persone. Compila il profilo e genera la tua scheda con ChatGPT, oppure importa il JSON del tuo coach.</p><button id="emptyProgramStart">Crea o importa una scheda</button></div>`;
+    $("doneCount").textContent="0/0";
+    $("progBar").style.width="0%";
+    const start=$("emptyProgramStart");if(start)start.onclick=()=>openSetupGuide(1);
+    return;
+  }
   $("dayTitle").childNodes[0].nodeValue = d.title;
   $("daySub").textContent = d.sub;
   $("dayNote").innerHTML = d.note ? `<div class="note-day">${safe(d.note)}</div>` : "";
@@ -663,6 +634,7 @@ function renderList(){
 }
 
 function updateProgress(){
+  if(!day()){$("doneCount").textContent="0/0";$("progBar").style.width="0%";return;}
   let done = 0, tot = 0;
   day().ex.forEach(ex => {
     const entry = exEntry(ex);
@@ -1065,6 +1037,7 @@ function buildMarkdownExport(){
   return md;
 }
 function exportMarkdown(){
+  if(!PROGRAM.length){alert("Nessuna scheda disponibile: importa prima il tuo programma.");return;}
   const md = buildMarkdownExport();
   if(navigator.clipboard && navigator.clipboard.writeText){
     navigator.clipboard.writeText(md).then(() => showToast("Markdown copiato negli appunti")).catch(() => {});
@@ -1098,7 +1071,7 @@ function importData(){
         if(obj.profile && typeof obj.profile==="object") localStorage.setItem(PROFILE_KEY,JSON.stringify(obj.profile));
         if(obj.restOverrides && typeof obj.restOverrides==="object") localStorage.setItem(REST_OVERRIDES_KEY,JSON.stringify(obj.restOverrides));
         if(obj.activeProgram){validateProgram(obj.activeProgram,true); localStorage.setItem(PKEY,JSON.stringify(obj.activeProgram)); loadProgram();state.dayId=PROGRAM[0].id;renderDays();}
-        closeSheet(); renderList();renderWelcome();
+        closeSheet(); renderDays();renderList();renderWelcome();
       }catch(e){ alert("File non valido: serve un backup creato da questa app."); }
     };
     rd.readAsText(f);
@@ -1124,13 +1097,13 @@ function setActiveNav(name){document.querySelectorAll("[data-nav]").forEach(el=>
 function renderWelcome(){
   const p=getProfile();
   const ready=p.goal && Array.isArray(p.trainingWeekdays)&&p.trainingWeekdays.length;
-  $("welcomeBox").innerHTML=ready?"":`<div class="welcome"><h2>Benvenuto su Palestra Coach</h2><p>La scheda d'esempio è già disponibile. Per crearne una personale con ChatGPT, configura prima obiettivi e giorni di allenamento.</p><button id="welcomeStart">Configura la mia scheda</button></div>`;
+  $("welcomeBox").innerHTML=PROGRAM.length?(!ready?`<div class="welcome"><h2>Completa il profilo proGYM</h2><p>Configura obiettivi e giorni per ricevere un prompt personalizzato.</p><button id="welcomeStart">Configura profilo</button></div>`:""):`<div class="welcome"><h2>Benvenuto su proGYM</h2><p>Non ci sono schede preimpostate. Crea il tuo profilo e importa il programma creato con ChatGPT o dal tuo coach.</p><button id="welcomeStart">Inizia la configurazione</button></div>`;
   const b=$("welcomeStart");if(b)b.onclick=()=>openSetupGuide(1);
 }
 function openSetupGuide(step=1){
  const steps=`<div class="steps">${[1,2,3].map(i=>`<i class="${i<=step?"on":""}"></i>`).join("")}</div>`;
  if(step===1){
-  openSheet(`<h2>1 · Profilo e obiettivi</h2><div class="sub">Il prompt per l'AI userà queste informazioni. Nessuna modifica alla scheda attuale finché non importi un nuovo programma.</div>${steps}<p>Indica almeno obiettivo, priorità specifica e giorni di allenamento. Nel profilo puoi anche modificare il recupero predefinito.</p><button class="big-btn primary" id="guideProfile">Compila il profilo</button><button class="big-btn" id="guideNext">Ho già compilato: avanti</button>`);
+  openSheet(`<h2>1 · Profilo e obiettivi</h2><div class="sub">Il prompt per l'AI userà queste informazioni. La tua scheda rimane vuota finché non ne importi una. Nessun programma di altri utenti viene preinstallato.</div>${steps}<p>Indica almeno obiettivo, priorità specifica e giorni di allenamento. Nel profilo puoi anche modificare il recupero predefinito.</p><button class="big-btn primary" id="guideProfile">Compila il profilo</button><button class="big-btn" id="guideNext">Ho già compilato: avanti</button>`);
   $("guideProfile").onclick=()=>openProfile(true);$("guideNext").onclick=()=>openSetupGuide(2);return;
  }
  if(step===2){
@@ -1246,15 +1219,15 @@ function openProgramManager(){
     <button class="big-btn" id="pasteProgram">Incolla JSON</button>
     <button class="big-btn" id="exportProgram">Esporta scheda JSON</button>
     <button class="big-btn" id="copyPrompt">Copia prompt per ChatGPT / Gemini / coach</button>
-    <button class="big-btn" id="resetProgram">Ripristina scheda di esempio</button>
+    <button class="big-btn" id="resetProgram">Rimuovi la scheda attiva</button>
     <p class="warn">L'importazione sostituisce la scheda visualizzata, non cancella i precedenti allenamenti. Esegui comunque un backup prima di modifiche importanti. Le sostituzioni di esercizio fatte durante l'allenamento valgono solo per quella data.</p>
     <button class="big-btn" onclick="closeSheet()">Chiudi</button>`);
   $("startGuide").onclick=()=>openSetupGuide(1);
   $("importProgram").onclick=selectProgramFile;
   $("pasteProgram").onclick=openPasteProgram;
-  $("exportProgram").onclick=()=>downloadJson({schemaVersion:"1.0",program:{name:programName(),days:PROGRAM.map(d=>({name:d.title,tab:d.tab,weekday:d.weekday,sub:d.sub,note:d.note,exercises:d.ex.map(e=>({name:e.name,sets:e.sets,reps:e.reps,rir:e.rir??2,restSeconds:e.rest,muscle:e.muscle,notes:e.tip,variants:e.variants||[],bw:!!e.bw}))}))}},"scheda-personale.json");
+  $("exportProgram").onclick=()=>{if(!PROGRAM.length){alert("Prima importa una scheda.");return;}downloadJson({schemaVersion:"1.0",program:{name:programName(),days:PROGRAM.map(d=>({name:d.title,tab:d.tab,weekday:d.weekday,sub:d.sub,note:d.note,exercises:d.ex.map(e=>({name:e.name,sets:e.sets,reps:e.reps,rir:e.rir??2,restSeconds:e.rest,muscle:e.muscle,notes:e.tip,variants:e.variants||[],bw:!!e.bw}))}))}},"scheda-personale.json");};
   $("copyPrompt").onclick=copyProfilePrompt;
-  $("resetProgram").onclick=()=>{if(!confirm("Ripristinare la scheda di esempio? Lo storico rimarrà salvato."))return;PROGRAM=JSON.parse(JSON.stringify(DEFAULT_PROGRAM));window.ACTIVE_PROGRAM_NAME="Scheda di esempio";localStorage.removeItem(PKEY);rebuildMuscles();state.dayId=PROGRAM[0].id;closeSheet();renderDays();renderList();};
+  $("resetProgram").onclick=()=>{if(!confirm("Rimuovere la scheda attiva? Lo storico degli allenamenti non verrà cancellato."))return;PROGRAM=[];window.ACTIVE_PROGRAM_NAME="";localStorage.removeItem(PKEY);rebuildMuscles();state.dayId=null;closeSheet();renderDays();renderList();renderWelcome();};
 }
 async function importProgramText(txt){
   try{

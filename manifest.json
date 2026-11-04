@@ -1,7 +1,7 @@
 {
-  "name": "Palestra Coach — Schede personalizzate",
-  "short_name": "Palestra Coach",
-  "description": "Allenamento personalizzato, import JSON e coaching progressivo",
+  "name": "proGYM — Allenamento intelligente",
+  "short_name": "proGYM",
+  "description": "Schede personalizzate, diario di allenamento e progressione intelligente",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
