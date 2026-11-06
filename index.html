@@ -203,6 +203,12 @@ body{padding-bottom:calc(155px + env(safe-area-inset-bottom))}
   box-shadow:0 12px 30px rgba(0,0,0,.5);
 }
 .timer.on{display:flex}
+.timer.expired{border-color:#3ED598;background:#173329}
+.timer.expired .n{font-size:1.06rem;min-width:100px;color:#b4f6d4}
+.timer.expired #timerAdd{display:none}
+.timer.expired #timerStop{background:#3ED598;color:#092319;border-color:#3ED598;font-weight:800}
+.flexible-hint{margin:8px 14px;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--surface);font-size:.78rem;color:var(--muted)}
+.flexible-hint b{color:var(--accent)}
 .timer .n{font-size:1.8rem;font-weight:700;letter-spacing:-.5px;min-width:86px}
 .timer .lbl{flex:1;font-size:.78rem;color:var(--muted)}
 .timer button{padding:10px 12px;border-radius:10px;background:var(--surface-2);border:1px solid var(--line);font-size:.8rem;font-weight:600}
@@ -285,7 +291,7 @@ body{padding-bottom:calc(155px + env(safe-area-inset-bottom))}
   </div>
   <div class="lbl" id="timerLbl">Recupero</div>
   <button id="timerAdd">+30s</button>
-  <button id="timerStop">Stop</button>
+  <button id="timerStop">Interrompi</button>
 </div>
 
 <nav class="bottom-nav" aria-label="Navigazione principale">
@@ -454,10 +460,22 @@ function weekdayFromISO(iso){
   const w = new Date(iso + "T12:00:00").getDay();
   return w === 0 ? 7 : w;
 }
+function isFlexibleSchedule(){return getProfile().scheduleMode === "flexible";}
 function selectDayForDate(){
-  const match=PROGRAM.find(d=>d.weekday === weekdayFromISO(state.date));
-  if(match) state.dayId=match.id;
+  if(!isFlexibleSchedule()){
+    const match=PROGRAM.find(d=>d.weekday === weekdayFromISO(state.date));
+    if(match)state.dayId=match.id;
+  }
   renderDays();renderList();
+}
+function nextFlexibleWorkout(){
+  if(!PROGRAM.length)return null;
+  const keys=Object.keys(Store.load().sessions||{}).sort().reverse();
+  const last=keys.find(k=>k.split("__")[0]<=state.date && Object.values(Store.load().sessions[k]||{}).some(e=>e?.sets?.some(s=>s.d)));
+  if(!last)return PROGRAM[0];
+  const lastDay=last.split("__").slice(1).join("__");
+  const idx=PROGRAM.findIndex(d=>d.id===lastDay);
+  return idx<0?PROGRAM[0]:PROGRAM[(idx+1)%PROGRAM.length];
 }
 function ageFromDOB(dob){
   if(!/^\d{4}-\d{2}-\d{2}$/.test(dob||"")) return null;
@@ -584,7 +602,8 @@ function renderList(){
   }
   $("dayTitle").childNodes[0].nodeValue = d.title;
   $("daySub").textContent = d.sub;
-  $("dayNote").innerHTML = d.note ? `<div class="note-day">${safe(d.note)}</div>` : "";
+  const recommended=isFlexibleSchedule()?nextFlexibleWorkout():null;
+  $("dayNote").innerHTML = (isFlexibleSchedule()?`<div class="flexible-hint"><b>Giorni flessibili:</b> oggi puoi svolgere qualunque giornata della scheda. Selezionala dalle schede in alto; ${recommended?`prossima seduta suggerita: <b>${safe(recommended.title)}</b>`:"scegli la tua prima seduta"}. Non è un obbligo: rispetta il recupero tra le sedute.</div>`:"")+(d.note ? `<div class="note-day">${safe(d.note)}</div>` : "");
 
   $("list").innerHTML = d.ex.map(ex => {
     const entry = exEntry(ex);
@@ -749,90 +768,114 @@ function showToast(msg){
   showToast._t = setTimeout(() => el.classList.remove("on"), 2800);
 }
 
-/* ---------- Timer di recupero: basato su timestamp reale, sopravvive a schermo spento ---------- */
-let t = { endTime:null, total:0, label:"", id:null };
-let wakeLock = null;
-
+/* ---------- Timer recupero v2.5: timestamp + conferma esplicita ---------- */
+const ALARM_SETTINGS_KEY="progym_alarm_settings_v25";
+const DEFAULT_ALARM={sound:true,vibration:true,notifications:false};
+function getAlarmSettings(){try{return {...DEFAULT_ALARM,...JSON.parse(localStorage.getItem(ALARM_SETTINGS_KEY)||"{}")} }catch(_){return {...DEFAULT_ALARM}}}
+let t={endTime:null,total:0,label:"",id:null,expired:false,alertId:null,notified:false};
+const TIMER_NOTIFICATION_TAG="progym-rest";
 function persistTimer(){
-  try{
-    if(t.endTime) localStorage.setItem(TKEY, JSON.stringify({endTime:t.endTime, total:t.total, label:t.label}));
-    else localStorage.removeItem(TKEY);
-  }catch(e){}
+ try{if(t.endTime||t.expired)localStorage.setItem(TKEY,JSON.stringify({endTime:t.endTime,total:t.total,label:t.label,expired:t.expired}));else localStorage.removeItem(TKEY);}catch(_){}
 }
-async function requestWakeLock(){
-  try{ if("wakeLock" in navigator) wakeLock = await navigator.wakeLock.request("screen"); }catch(e){}
+function supportsScheduledNotifications(){return typeof window.TimestampTrigger!=="undefined" && "serviceWorker" in navigator;}
+async function getTimerRegistration(){
+ if(!("serviceWorker" in navigator))return null;
+ try{return await navigator.serviceWorker.ready}catch(_){return null;}
 }
-function releaseWakeLock(){
-  if(wakeLock){ wakeLock.release().catch(()=>{}); wakeLock = null; }
+async function clearScheduledRestNotification(){
+ try{const reg=await getTimerRegistration();if(!reg?.getNotifications)return;
+  const notifications=await reg.getNotifications({tag:TIMER_NOTIFICATION_TAG,includeTriggered:true});notifications.forEach(n=>n.close());
+ }catch(_){}
 }
-function startTimer(sec, label){
-  t.endTime = Date.now() + sec*1000;
-  t.total = sec;
-  t.label = label;
-  persistTimer();
-  $("timerLbl").textContent = "Recupero · " + label;
-  $("timer").classList.add("on");
-  requestWakeLock();
-  clearInterval(t.id);
-  tick();
-  t.id = setInterval(tick, 250);
+async function scheduleRestNotification(endTime){
+ if(!getAlarmSettings().notifications||!("Notification" in window)||Notification.permission!=="granted"||!supportsScheduledNotifications())return;
+ try{const reg=await getTimerRegistration();if(!reg)return;
+  const n=await reg.getNotifications({tag:TIMER_NOTIFICATION_TAG,includeTriggered:true});n.forEach(x=>x.close());
+  if(t.endTime!==endTime)return;
+  await reg.showNotification("proGYM · Recupero terminato",{body:"Torna all’allenamento. Conferma nell’app per silenziare l’avviso.",tag:TIMER_NOTIFICATION_TAG,icon:"icon-192.png",badge:"icon-192.png",requireInteraction:true,showTrigger:new TimestampTrigger(endTime)});
+ }catch(err){console.info("Notifica temporizzata non disponibile:",err);}
+}
+async function showRestNotification(){
+ if(!getAlarmSettings().notifications||!("Notification" in window)||Notification.permission!=="granted"||t.notified)return;
+ t.notified=true;
+ try{const reg=await getTimerRegistration();if(reg)await reg.showNotification("proGYM · Recupero terminato",{body:"Il tempo di recupero è finito. Apri proGYM e conferma.",tag:TIMER_NOTIFICATION_TAG,icon:"icon-192.png",requireInteraction:true});}catch(_){}
+}
+function startTimer(sec,label){
+ clearInterval(t.id);clearInterval(t.alertId);clearScheduledRestNotification();
+ t.endTime=Date.now()+sec*1000;t.total=sec;t.label=label;t.expired=false;t.notified=false;
+ persistTimer();$("timer").classList.remove("expired");$("timer").classList.add("on");
+ $("timerLbl").textContent="Recupero · "+label;$("timerStop").textContent="Interrompi";
+ // Nessun wake lock: l'utente può spegnere il display. Il tempo è basato sull'orologio reale.
+ tick();t.id=setInterval(tick,350);scheduleRestNotification(t.endTime);
 }
 function tick(){
-  if(!t.endTime) return;
-  const left = Math.max(0, Math.round((t.endTime - Date.now())/1000));
-  $("timerNum").textContent = fmt(left);
-  $("timerRing").style.width = (left/t.total*100) + "%";
-  if(left <= 0) endTimer();
+ if(!t.endTime||t.expired)return;
+ const left=Math.max(0,Math.ceil((t.endTime-Date.now())/1000));
+ $("timerNum").textContent=fmt(left);$("timerRing").style.width=(left/t.total*100)+"%";
+ if(left<=0)endTimer();
+}
+function activeAlarmSignal(){
+ if(!t.expired || document.visibilityState!=="visible")return;
+ const prefs=getAlarmSettings();
+ if(prefs.sound)beep();
+ if(prefs.vibration && navigator.vibrate)navigator.vibrate([350,140,350,140,500]);
 }
 function endTimer(){
-  clearInterval(t.id);
-  t.endTime = null;
-  persistTimer();
-  releaseWakeLock();
-  beep();
-  if(navigator.vibrate) navigator.vibrate([250,120,250]);
-  setTimeout(() => $("timer").classList.remove("on"), 4000);
+ if(t.expired)return;
+ clearInterval(t.id);t.endTime=null;t.expired=true;persistTimer();
+ $("timer").classList.add("on","expired");$("timerNum").textContent="TEMPO FINITO";
+ $("timerRing").style.width="0%";$("timerLbl").textContent="Recupero finito · "+t.label;
+ $("timerStop").textContent="Ho ripreso ✓";
+ activeAlarmSignal();clearInterval(t.alertId);t.alertId=setInterval(activeAlarmSignal,8000);
+ showRestNotification();
 }
 function stopTimer(){
-  clearInterval(t.id);
-  t.endTime = null;
-  persistTimer();
-  releaseWakeLock();
-  $("timer").classList.remove("on");
+ clearInterval(t.id);clearInterval(t.alertId);
+ t.endTime=null;t.expired=false;t.notified=false;persistTimer();
+ $("timer").classList.remove("on","expired");
+ if(navigator.vibrate)navigator.vibrate(0);
+ clearScheduledRestNotification();
 }
-$("timerStop").onclick = stopTimer;
-$("timerAdd").onclick = () => {
-  if(!t.endTime) return;
-  t.endTime += 30000;
-  t.total = Math.max(t.total, Math.round((t.endTime - Date.now())/1000));
-  persistTimer();
-  tick();
+$("timerStop").onclick=stopTimer;
+$("timerAdd").onclick=()=>{
+ if(!t.endTime||t.expired)return;
+ t.endTime+=30000;t.total=Math.max(t.total,Math.ceil((t.endTime-Date.now())/1000));
+ persistTimer();tick();clearScheduledRestNotification().then(()=>scheduleRestNotification(t.endTime));
 };
-document.addEventListener("visibilitychange", () => {
-  if(document.visibilityState === "visible" && t.endTime){
-    tick();
-    if(!wakeLock) requestWakeLock();
-  }
+document.addEventListener("visibilitychange",()=>{
+ if(document.visibilityState==="visible"){
+  if(t.endTime)tick();
+  else if(t.expired)activeAlarmSignal();
+ }
 });
-// resume da localStorage se la pagina viene ricaricata mentre il timer era attivo
 (function resumeTimer(){
-  try{
-    const raw = localStorage.getItem(TKEY);
-    if(!raw) return;
-    const saved = JSON.parse(raw);
-    if(saved.endTime && saved.endTime > Date.now()){
-      t.endTime = saved.endTime; t.total = saved.total; t.label = saved.label;
-      $("timerLbl").textContent = "Recupero · " + saved.label;
-      $("timer").classList.add("on");
-      requestWakeLock();
-      clearInterval(t.id);
-      tick();
-      t.id = setInterval(tick, 250);
-    } else {
-      localStorage.removeItem(TKEY);
-    }
-  }catch(e){}
+ try{const raw=localStorage.getItem(TKEY);if(!raw)return;const saved=JSON.parse(raw);
+  t.label=saved.label||"Recupero";t.total=saved.total||180;
+  if(saved.expired || (saved.endTime && saved.endTime<=Date.now())){endTimer();return;}
+  if(saved.endTime){t.endTime=saved.endTime;$("timerLbl").textContent="Recupero · "+t.label;$("timer").classList.add("on");tick();t.id=setInterval(tick,350);}
+ }catch(_){}
 })();
+async function enableRestNotifications(){
+ if(!("Notification" in window)){alert("Le notifiche non sono disponibili su questo browser.");return;}
+ try{
+  const result=await Notification.requestPermission();
+  const cfg=getAlarmSettings();cfg.notifications=(result==="granted");localStorage.setItem(ALARM_SETTINGS_KEY,JSON.stringify(cfg));
+  alert(result==="granted"?"Notifiche abilitate. L'avviso sullo schermo bloccato dipende dal supporto del browser: "+(supportsScheduledNotifications()?"è disponibile la pianificazione sperimentale.":"questa versione del browser NON supporta la pianificazione a schermo spento."):"Autorizzazione notifiche non concessa.");
+ }catch(err){alert("Impossibile abilitare le notifiche: "+err.message);}
+}
+function openAlarmSettings(){
+ const cfg=getAlarmSettings();
+ openSheet(`<h2>Avvisi di recupero</h2><p class="warn">Il timer continua a calcolare il tempo anche a schermo spento, ma i browser possono sospendere suoni e vibrazioni. La notifica programmata a telefono bloccato funziona solo sui dispositivi compatibili: non è garantita dalla PWA.</p>
+  <label class="profile-field"><input id="alarmSound" type="checkbox" ${cfg.sound?"checked":""}> Suona finché non confermo (solo con app attiva)</label>
+  <label class="profile-field"><input id="alarmVibration" type="checkbox" ${cfg.vibration?"checked":""}> Vibra (se supportato dal dispositivo)</label>
+  <button class="big-btn" id="alarmEnableNotifications">Abilita notifiche (${typeof Notification!=="undefined"?Notification.permission:"non supportate"})</button>
+  <p class="warn">Notifiche pianificate a schermo bloccato: <b>${supportsScheduledNotifications()?"supporto rilevato (sperimentale)":"non supportate da questo browser"}</b>. Per un allarme affidabile a telefono bloccato occorre una futura app nativa.</p>
+  <button class="big-btn" id="alarmTestSound">Prova suono/vibrazione</button>
+  <button class="big-btn primary" id="alarmSave">Salva preferenze</button>`);
+ $("alarmEnableNotifications").onclick=enableRestNotifications;
+ $("alarmTestSound").onclick=()=>{beep();if(navigator.vibrate)navigator.vibrate([250,150,250]);};
+ $("alarmSave").onclick=()=>{const updated={...getAlarmSettings(),sound:$("alarmSound").checked,vibration:$("alarmVibration").checked};localStorage.setItem(ALARM_SETTINGS_KEY,JSON.stringify(updated));closeSheet();showToast("Avvisi salvati");};
+}
 
 let actx = null;
 function beep(){
@@ -1025,6 +1068,7 @@ $("btnSettings").onclick = () => {
     <button class="big-btn" onclick="importData()">Importa backup</button>
     <button class="big-btn" onclick="openProgramManager()">Gestisci schede e JSON</button>
     <button class="big-btn" onclick="openProfile()">Profilo atleta</button>
+    <button class="big-btn" onclick="openAlarmSettings()">🔔 Suono, vibrazione e notifiche recupero</button>
     <button class="big-btn danger" onclick="resetDay()">Azzera l'allenamento di oggi</button>
     <button class="big-btn danger" onclick="wipe()">Cancella tutto lo storico</button>
     <p class="warn">${Store.persistent
@@ -1062,7 +1106,7 @@ function exportMarkdown(){
 }
 
 function exportData(){
-  const blob = new Blob([JSON.stringify({sessions:Store.load().sessions,profile:getProfile(),restOverrides:getRestOverrides(),activeProgram:localStorage.getItem(PKEY)?JSON.parse(localStorage.getItem(PKEY)):null})], {type:"application/json"});
+  const blob = new Blob([JSON.stringify({sessions:Store.load().sessions,profile:getProfile(),restOverrides:getRestOverrides(),alarmSettings:getAlarmSettings(),activeProgram:localStorage.getItem(PKEY)?JSON.parse(localStorage.getItem(PKEY)):null})], {type:"application/json"});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = "palestra-backup-" + todayISO() + ".json";
@@ -1082,6 +1126,7 @@ function importData(){
         Store.replace({sessions: Object.assign({}, cur.sessions, obj.sessions)});
         if(obj.profile && typeof obj.profile==="object") localStorage.setItem(PROFILE_KEY,JSON.stringify(obj.profile));
         if(obj.restOverrides && typeof obj.restOverrides==="object") localStorage.setItem(REST_OVERRIDES_KEY,JSON.stringify(obj.restOverrides));
+        if(obj.alarmSettings && typeof obj.alarmSettings==="object")localStorage.setItem(ALARM_SETTINGS_KEY,JSON.stringify(obj.alarmSettings));
         if(obj.activeProgram){validateProgram(obj.activeProgram,true); localStorage.setItem(PKEY,JSON.stringify(obj.activeProgram)); loadProgram();state.dayId=PROGRAM[0].id;renderDays();}
         closeSheet(); renderDays();renderList();renderWelcome();
       }catch(e){ alert("File non valido: serve un backup creato da questa app."); }
@@ -1108,7 +1153,7 @@ function wipe(){
 function setActiveNav(name){document.querySelectorAll("[data-nav]").forEach(el=>el.classList.toggle("active",el.dataset.nav===name));}
 function renderWelcome(){
   const p=getProfile();
-  const ready=p.goal && Array.isArray(p.trainingWeekdays)&&p.trainingWeekdays.length;
+  const ready=p.goal && (p.scheduleMode==="flexible" || (Array.isArray(p.trainingWeekdays)&&p.trainingWeekdays.length));
   $("welcomeBox").innerHTML=PROGRAM.length?(!ready?`<div class="welcome"><h2>Completa il profilo proGYM</h2><p>Configura obiettivi e giorni per ricevere un prompt personalizzato.</p><button id="welcomeStart">Configura profilo</button></div>`:""):`<div class="welcome"><h2>Benvenuto su proGYM</h2><p>Non ci sono schede preimpostate. Crea una scheda manualmente, trascrivila da una foto oppure importa il programma del tuo coach o dell’AI.</p><button id="welcomeStart">Inizia la configurazione</button></div>`;
   const b=$("welcomeStart");if(b)b.onclick=()=>openSetupGuide(1);
 }
@@ -1186,7 +1231,7 @@ function recognizeMuscle(name){return EXERCISE_MUSCLES.find(([re])=>re.test(name
 const COACH_PROMPT = `Agisci come un preparatore atletico basato sulle evidenze. Crea una scheda personalizzata in base al profilo che ti fornirò. Non formulare diagnosi e non dichiarare sicuri esercizi per eventuali infortuni.
 Restituisci SOLO un oggetto JSON valido, senza markdown o testo aggiuntivo, con questa struttura:
 {"schemaVersion":"1.0","program":{"name":"Nome programma","days":[{"name":"Lunedì - Pull","tab":"Lun","weekday":1,"sub":"Focus dorsali","note":"Indicazioni facoltative","exercises":[{"name":"Lat machine presa neutra","sets":3,"reps":{"min":8,"max":12},"rir":2,"restSeconds":180,"muscle":"Dorso","notes":"Consigli tecnici sintetici","variants":["Lat machine convergente"]}]}]}}
-Usa solo questi valori per muscle: Petto, Dorso, Spalle, Bicipiti, Tricipiti, Quadricipiti, Femorali, Glutei, Adduttori, Polpacci, Core, Collo, Altro. Ogni giornata deve avere weekday: 1=lunedì, 2=martedì, 3=mercoledì, 4=giovedì, 5=venerdì, 6=sabato, 7=domenica. Rispetta ESATTAMENTE i giorni selezionati nel profilo, con una giornata per ogni giorno disponibile. Da 1 a 7 giornate e da 1 a 25 esercizi/giorno, serie 1–10, recupero 15–600 secondi. Evita esercizi contro le limitazioni che descriverò, segnala la necessità di valutazione sanitaria se pertinente e non inventare dati. Non includere nome, data di nascita o dati sanitari nel JSON della scheda. Le limitazioni servono soltanto per scegliere esercizi appropriati: se ci sono segnala che serve parere professionale, non formulare diagnosi. Considera anche il campo goalDetails, la durata massima, attrezzatura e preferenze. Imposta restSeconds per ogni esercizio; se restMode è global, usa defaultRestSeconds come preferenza di partenza, salvo giustificazioni tecniche.
+Usa solo questi valori per muscle: Petto, Dorso, Spalle, Bicipiti, Tricipiti, Quadricipiti, Femorali, Glutei, Adduttori, Polpacci, Core, Collo, Altro. Se scheduleMode è "flexible", genera esattamente sessionsPerWeek giornate ordinate (A, B, C...) e usa weekday:null: l’atleta sceglierà quando allenarsi, senza giorni fissi. Se è "fixed", ogni giornata deve avere weekday: 1=lunedì, 2=martedì, 3=mercoledì, 4=giovedì, 5=venerdì, 6=sabato, 7=domenica, rispettando esattamente i giorni selezionati nel profilo. Da 1 a 7 giornate e da 1 a 25 esercizi/giorno, serie 1–10, recupero 15–600 secondi. Evita esercizi contro le limitazioni che descriverò, segnala la necessità di valutazione sanitaria se pertinente e non inventare dati. Non includere nome, data di nascita o dati sanitari nel JSON della scheda. Le limitazioni servono soltanto per scegliere esercizi appropriati: se ci sono segnala che serve parere professionale, non formulare diagnosi. Considera anche il campo goalDetails, la durata massima, attrezzatura e preferenze. Imposta restSeconds per ogni esercizio; se restMode è global, usa defaultRestSeconds come preferenza di partenza, salvo giustificazioni tecniche.
 
 PROFILO E PREFERENZE DA CONSIDERARE (scrivo qui sotto):
 `;
@@ -1210,7 +1255,16 @@ function openProfile(fromGuide=false){
     <label class="profile-field">Durata massima per seduta (minuti)<input id="pf_durationMinutes" type="number" min="20" max="240" value="${safeAttr(p.durationMinutes||75)}"></label>
     <label class="profile-field">Attrezzatura disponibile<select id="pf_equipment">${["Palestra completa","Palestra essenziale","Home gym","Corpo libero"].map(x=>`<option ${x===(p.equipment||"Palestra completa")?"selected":""}>${x}</option>`).join("")}</select></label>
     <label class="profile-field">Esercizi preferiti o da evitare<textarea id="pf_preferences" maxlength="500" placeholder="Es. preferisco macchinari, non voglio squat libero">${safe(p.preferences||"")}</textarea></label>
-    <div class="profile-field">Giorni disponibili per allenarti <span style="color:var(--muted)">(seleziona quelli abituali)</span><div class="profile-days">${dayNames.map((d,i)=>`<label><input type="checkbox" data-training-weekday="${i+1}" ${selected.includes(i+1)?"checked":""}> ${d}</label>`).join("")}</div></div>
+    <label class="profile-field">Organizzazione degli allenamenti
+      <select id="pf_scheduleMode">
+        <option value="fixed" ${p.scheduleMode!=="flexible"?"selected":""}>Giorni fissi (es. lunedì e giovedì)</option>
+        <option value="flexible" ${p.scheduleMode==="flexible"?"selected":""}>Giorni flessibili / lavoro a turni</option>
+      </select>
+    </label>
+    <label class="profile-field">Numero di sedute desiderate ogni settimana (1–7)
+      <input type="number" id="pf_sessionsPerWeek" min="1" max="7" value="${safeAttr(p.sessionsPerWeek||p.trainingWeekdays?.length||p.days||4)}">
+    </label>
+    <div class="profile-field" id="fixedDaysProfile">Giorni disponibili per allenarti <span style="color:var(--muted)">(seleziona quelli abituali)</span><div class="profile-days">${dayNames.map((d,i)=>`<label><input type="checkbox" data-training-weekday="${i+1}" ${selected.includes(i+1)?"checked":""}> ${d}</label>`).join("")}</div></div>
     <label class="profile-field">Recupero tra le serie: come preferisci gestirlo?
       <select id="pf_restMode">
         <option value="program" ${p.restMode!=="global"?"selected":""}>Usa i tempi della scheda importata</option>
@@ -1220,9 +1274,11 @@ function openProfile(fromGuide=false){
     <label class="profile-field">Tempo predefinito (secondi, 15–600)<input id="pf_defaultRestSeconds" type="number" min="15" max="600" step="15" value="${safeAttr(p.defaultRestSeconds||180)}"></label>
     <p class="warn">Puoi comunque cambiare il recupero di ogni esercizio dal pulsante ⏱ Recupero. Le modifiche specifiche prevalgono sul tempo predefinito.</p>
     ${field("Preferenze e limitazioni (facoltativo)","limitations")}
-    <p class="warn">I giorni del profilo descrivono la tua disponibilità: <b>non modificano automaticamente la scheda</b>. Importa una scheda con lo stesso numero di giornate e i rispettivi weekday. Non inserire dati sanitari sensibili se non desideri conservarli sul telefono.</p>
+    <p class="warn">Con giorni flessibili scegli di volta in volta la giornata dal menu dell'allenamento. La data reale rimane nello storico. I giorni indicati nel profilo non spostano o cancellano la scheda. Non inserire dati sanitari sensibili se non desideri conservarli sul telefono.</p>
     <button class="big-btn primary" id="saveProfile">Salva profilo</button><button class="big-btn" onclick="closeSheet()">Annulla</button>`);
   $("pf_birthDate").addEventListener("input",e=>{const a=ageFromDOB(e.target.value);$("agePreview").textContent=a===null?"Inserisci una data di nascita valida e non futura.":`Età attuale: ${a} anni.`;});
+  const refreshSchedule=()=>{$("fixedDaysProfile").style.display=$("pf_scheduleMode").value==="flexible"?"none":"";};
+  $("pf_scheduleMode").onchange=refreshSchedule;refreshSchedule();
   $("saveProfile").onclick=()=>{
     const vals={};["nickname","birthDate","height","weight","sex","goal","priority","experience","limitations"].forEach(k=>vals[k]=String($("pf_"+k).value).slice(0,100));
     if(vals.birthDate && ageFromDOB(vals.birthDate)===null){alert("Data di nascita non valida.");return;}
@@ -1234,9 +1290,12 @@ function openProfile(fromGuide=false){
     vals.defaultRestSeconds=Number($("pf_defaultRestSeconds").value);
     if(!Number.isInteger(vals.defaultRestSeconds)||vals.defaultRestSeconds<15||vals.defaultRestSeconds>600){alert("Recupero predefinito: tra 15 e 600 secondi.");return;}
     if(!Number.isInteger(vals.durationMinutes)||vals.durationMinutes<20||vals.durationMinutes>240){alert("Durata: indica un valore tra 20 e 240 minuti.");return;}
-    vals.trainingWeekdays=Array.from(document.querySelectorAll("[data-training-weekday]:checked")).map(e=>Number(e.dataset.trainingWeekday));
-    if(!vals.trainingWeekdays.length){alert("Seleziona almeno un giorno di allenamento.");return;}
-    vals.days=String(vals.trainingWeekdays.length);
+    vals.scheduleMode=$("pf_scheduleMode").value;
+    vals.sessionsPerWeek=Number($("pf_sessionsPerWeek").value);
+    if(!Number.isInteger(vals.sessionsPerWeek)||vals.sessionsPerWeek<1||vals.sessionsPerWeek>7){alert("Numero sedute: da 1 a 7.");return;}
+    vals.trainingWeekdays=vals.scheduleMode==="flexible"?[]:Array.from(document.querySelectorAll("[data-training-weekday]:checked")).map(e=>Number(e.dataset.trainingWeekday));
+    if(vals.scheduleMode==="fixed" && !vals.trainingWeekdays.length){alert("Seleziona almeno un giorno di allenamento.");return;}
+    vals.days=String(vals.scheduleMode==="flexible"?vals.sessionsPerWeek:vals.trainingWeekdays.length);
     try{localStorage.setItem(PROFILE_KEY,JSON.stringify(vals));showToast("Profilo salvato");closeSheet();renderWelcome();renderList();if(fromGuide===true)openSetupGuide(2);}catch(e){alert("Impossibile salvare il profilo: "+e.message);}
   };
 }
@@ -1246,14 +1305,14 @@ function openProfile(fromGuide=false){
 const MANUAL_DRAFT_KEY="progym_manual_draft_v24";
 const WEEKDAYS=["","Lunedì","Martedì","Mercoledì","Giovedì","Venerdì","Sabato","Domenica"];
 let manualDraft=null;
-function blankManualDay(weekday=1){return {name:WEEKDAYS[weekday]+' · Allenamento',weekday,exercises:[]};}
+function blankManualDay(weekday=1){return {name:(WEEKDAYS[weekday]||'Giornata')+' · Allenamento',weekday,exercises:[]};}
 function blankManualExercise(){const p=getProfile();return {name:"",sets:3,reps:"8-12",restSeconds:Number(p.defaultRestSeconds)||180,muscle:"Altro",notes:""};}
 function openManualBuilder(){
  try{manualDraft=JSON.parse(localStorage.getItem(MANUAL_DRAFT_KEY));}catch(_){manualDraft=null;}
  if(!manualDraft){
   if(PROGRAM.length){
    manualDraft={name:programName(),days:PROGRAM.map(d=>({id:d.id,name:d.title,weekday:d.weekday,exercises:d.ex.map(e=>({id:e.id,name:e.name,sets:e.sets,reps:e.reps,restSeconds:e.rest,muscle:e.muscle,notes:e.tip||""}))}))};
-  }else{const p=getProfile();const wd=p.trainingWeekdays?.[0]||1;manualDraft={name:"La mia scheda",days:[blankManualDay(wd)]};}
+  }else{const p=getProfile();const wd=p.scheduleMode==="flexible"?null:(p.trainingWeekdays?.[0]||1);manualDraft={name:"La mia scheda",days:[blankManualDay(wd)]};}
  }
  renderManualBuilder();
 }
@@ -1265,7 +1324,7 @@ function captureManual(){
  document.querySelectorAll('[data-mb-day]').forEach(node=>{
   const i=Number(node.dataset.mbDay),d=manualDraft.days[i];if(!d)return;
   d.name=node.querySelector('[data-mb-name]').value.slice(0,85);
-  d.weekday=Number(node.querySelector('[data-mb-weekday]').value);
+  d.weekday=node.querySelector('[data-mb-weekday]').value?Number(node.querySelector('[data-mb-weekday]').value):null;
   node.querySelectorAll('[data-mb-ex]').forEach(en=>{
    const j=Number(en.dataset.mbEx),e=d.exercises[j];if(!e)return;
    e.name=en.querySelector('[data-mb-exname]').value.slice(0,110);
@@ -1278,7 +1337,7 @@ function captureManual(){
  });persistManual();
 }
 function renderManualBuilder(){
- const wds=WEEKDAYS.map((x,i)=>i?`<option value="${i}">${x}</option>`:'').join('');
+ const wds='<option value="">Nessun giorno fisso (a turni)</option>'+WEEKDAYS.map((x,i)=>i?`<option value="${i}">${x}</option>`:'').join('');
  const blocks=manualDraft.days.map((d,i)=>`<div class="preview-day" data-mb-day="${i}" style="margin-bottom:14px">
  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><strong>Giornata ${i+1}</strong><button class="big-btn" style="width:auto;padding:9px" data-mb-remove-day="${i}">Rimuovi</button></div>
  <label class="profile-field">Nome giornata<input data-mb-name value="${safeAttr(d.name)}" placeholder="Es. Pull A"></label>
@@ -1296,11 +1355,11 @@ function renderManualBuilder(){
  <button class="big-btn" id="mbAddDay">+ Aggiungi giornata</button>
  <button class="big-btn primary" id="mbReview">Controlla e salva scheda</button>
  <button class="big-btn" id="mbClose">Salva bozza ed esci</button>`);
- document.querySelectorAll('[data-mb-day]').forEach((el,i)=>el.querySelector('[data-mb-weekday]').value=String(manualDraft.days[i].weekday||i+1));
+ document.querySelectorAll('[data-mb-day]').forEach((el,i)=>el.querySelector('[data-mb-weekday]').value=manualDraft.days[i].weekday==null?'':String(manualDraft.days[i].weekday));
  document.querySelectorAll('[data-mb-add-ex]').forEach(b=>b.onclick=()=>{captureManual();const i=Number(b.dataset.mbAddEx);manualDraft.days[i].exercises.push(blankManualExercise());persistManual();renderManualBuilder();});
  document.querySelectorAll('[data-mb-remove-ex]').forEach(b=>b.onclick=()=>{captureManual();const [i,j]=b.dataset.mbRemoveEx.split(':').map(Number);manualDraft.days[i].exercises.splice(j,1);persistManual();renderManualBuilder();});
  document.querySelectorAll('[data-mb-remove-day]').forEach(b=>b.onclick=()=>{captureManual();if(manualDraft.days.length===1){alert('Serve almeno una giornata.');return;}manualDraft.days.splice(Number(b.dataset.mbRemoveDay),1);persistManual();renderManualBuilder();});
- $('mbAddDay').onclick=()=>{captureManual();if(manualDraft.days.length>=7){alert('Massimo 7 giornate.');return;}const used=new Set(manualDraft.days.map(d=>d.weekday));const next=[1,2,3,4,5,6,7].find(x=>!used.has(x));manualDraft.days.push(blankManualDay(next||1));persistManual();renderManualBuilder();};
+ $('mbAddDay').onclick=()=>{captureManual();if(manualDraft.days.length>=7){alert('Massimo 7 giornate.');return;}const used=new Set(manualDraft.days.map(d=>d.weekday));const next=[1,2,3,4,5,6,7].find(x=>!used.has(x));manualDraft.days.push(blankManualDay(isFlexibleSchedule()?null:(next||1)));persistManual();renderManualBuilder();};
  $('mbClose').onclick=()=>{captureManual();closeSheet();showToast('Bozza salvata');};
  $('mbReview').onclick=()=>{captureManual();try{const obj={schemaVersion:'1.0',program:{name:manualDraft.name||'La mia scheda',manualEdit:true,days:manualDraft.days.map(d=>({id:d.id,name:d.name,weekday:d.weekday,exercises:d.exercises}))}};validateProgram(obj,true);importProgramText(JSON.stringify(obj),()=>localStorage.removeItem(MANUAL_DRAFT_KEY));}catch(err){alert('Controlla la scheda: '+err.message);}};
 }
@@ -1325,7 +1384,7 @@ function openTextProgram(){
    let muscle=x[3]||recognizeMuscle(x[0])||'Altro';muscle=MUSCLE_OPTIONS.find(m=>m.toLowerCase()===muscle.toLowerCase())||'Altro';
    current.exercises.push({name:x[0],sets:Number(match[1]),reps:match[3]?match[2]+'-'+match[3]:match[2],restSeconds:Number(x[2]||getProfile().defaultRestSeconds||180),muscle});
   }
-  const p=getProfile();const avail=p.trainingWeekdays||[];const used=new Set();for(const d of days){if(!d.weekday||used.has(d.weekday)){d.weekday=[...avail,1,2,3,4,5,6,7].find(n=>!used.has(Number(n)))||1;}used.add(d.weekday);}
+  const p=getProfile();const avail=p.trainingWeekdays||[];const used=new Set();for(const d of days){if(p.scheduleMode==="flexible"){d.weekday=null;continue;}if(!d.weekday||used.has(d.weekday)){d.weekday=[...avail,1,2,3,4,5,6,7].find(n=>!used.has(Number(n)))||1;}used.add(d.weekday);}
   importProgramText(JSON.stringify({schemaVersion:'1.0',program:{name:'Scheda da testo',days}}));
  }catch(e){alert('Impossibile interpretare il testo: '+e.message);}};
 }
@@ -1371,7 +1430,7 @@ async function importProgramText(txt, onSuccess){
     const checkedDays=validateProgram(obj,true);
     const p=getProfile();
     const declared=Array.isArray(p.trainingWeekdays)?p.trainingWeekdays.map(Number):null;
-    if(declared){
+    if(declared && p.scheduleMode!=="flexible"){
       const imported=checkedDays.map(d=>d.weekday).filter(Boolean);
       const mismatch=declared.length!==checkedDays.length || imported.length!==checkedDays.length || imported.some(x=>!declared.includes(x));
       if(mismatch && !confirm(`I giorni della scheda non coincidono con quelli scelti nel profilo. Profilo: ${declared.join(", ")} (1=lun ... 7=dom); scheda: ${imported.length?imported.join(", "):"non specificati"}. Importare comunque?`))return;
