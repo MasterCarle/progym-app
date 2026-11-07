@@ -12,6 +12,11 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>proGYM — Allenamento intelligente</title>
 <style>
+.builder-controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.builder-controls button{min-width:38px;min-height:40px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);color:var(--text);font-size:1rem;font-weight:700;cursor:pointer;padding:5px 10px}
+.builder-controls button:disabled{opacity:.3;cursor:default}
+.builder-controls button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
 :root{
   --bg:#161A21;
   --surface:#1E242D;
@@ -1339,24 +1344,41 @@ function captureManual(){
 function renderManualBuilder(){
  const wds='<option value="">Nessun giorno fisso (a turni)</option>'+WEEKDAYS.map((x,i)=>i?`<option value="${i}">${x}</option>`:'').join('');
  const blocks=manualDraft.days.map((d,i)=>`<div class="preview-day" data-mb-day="${i}" style="margin-bottom:14px">
- <div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><strong>Giornata ${i+1}</strong><button class="big-btn" style="width:auto;padding:9px" data-mb-remove-day="${i}">Rimuovi</button></div>
+ <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"><strong>Giornata ${i+1}</strong><div class="builder-controls"><button type="button" title="Sposta giornata prima" aria-label="Sposta giornata prima" data-mb-move-day="${i}:-1" ${i===0?'disabled':''}>↑</button><button type="button" title="Sposta giornata dopo" aria-label="Sposta giornata dopo" data-mb-move-day="${i}:1" ${i===manualDraft.days.length-1?'disabled':''}>↓</button><button type="button" data-mb-remove-day="${i}" aria-label="Rimuovi giornata">Rimuovi</button></div></div>
  <label class="profile-field">Nome giornata<input data-mb-name value="${safeAttr(d.name)}" placeholder="Es. Pull A"></label>
  <label class="profile-field">Giorno abituale<select data-mb-weekday>${wds}</select></label>
  ${d.exercises.map((e,j)=>`<div data-mb-ex="${j}" style="border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:12px">
- <div style="display:flex;justify-content:space-between;align-items:center"><strong>Esercizio ${j+1}</strong><button class="big-btn" style="width:auto;padding:8px" data-mb-remove-ex="${i}:${j}">Elimina</button></div>
+ <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><strong>Esercizio ${j+1}</strong><div class="builder-controls"><button type="button" title="Sposta esercizio su" aria-label="Sposta esercizio ${j+1} su" data-mb-move-ex="${i}:${j}:-1" ${j===0?'disabled':''}>↑</button><button type="button" title="Sposta esercizio giù" aria-label="Sposta esercizio ${j+1} giù" data-mb-move-ex="${i}:${j}:1" ${j===d.exercises.length-1?'disabled':''}>↓</button><button type="button" data-mb-remove-ex="${i}:${j}" aria-label="Elimina esercizio ${j+1}">Elimina</button></div></div>
  <label class="profile-field">Nome esercizio<input data-mb-exname value="${safeAttr(e.name)}" placeholder="Es. Lat machine presa neutra"></label>
  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><label class="profile-field">Serie<input type="number" min="1" max="10" data-mb-sets value="${e.sets}"></label><label class="profile-field">Ripetizioni<input data-mb-reps value="${safeAttr(e.reps)}" placeholder="8-12"></label></div>
  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><label class="profile-field">Recupero (sec)<input type="number" min="15" max="600" step="15" data-mb-rest value="${e.restSeconds}"></label><label class="profile-field">Gruppo muscolare<select data-mb-muscle>${MUSCLE_OPTIONS.map(m=>`<option ${m===e.muscle?'selected':''}>${m}</option>`).join('')}</select></label></div>
  <label class="profile-field">Indicazioni (facoltative)<input data-mb-notes value="${safeAttr(e.notes||'')}" placeholder="Es. movimento controllato"></label>
  </div>`).join('')}
  <button class="big-btn" data-mb-add-ex="${i}">+ Aggiungi esercizio</button></div>`).join('');
- openSheet(`<h2>Scrivi la tua scheda</h2><div class="sub">Inserisci liberamente giorni ed esercizi. La bozza viene salvata sul dispositivo. Prima dell'attivazione vedrai l'anteprima.</div>
+ openSheet(`<h2>Modifica e riordina la scheda</h2><div class="sub">Puoi cambiare serie, ripetizioni, esercizi e recuperi. Usa le frecce ↑ ↓ per riordinare esercizi e giornate: i valori inseriti vengono conservati anche durante gli spostamenti. <b>Premi “Controlla e salva scheda” per rendere effettive le modifiche.</b> Lo storico passato non viene cancellato.</div>
  <label class="profile-field">Nome programma<input id="mbName" value="${safeAttr(manualDraft.name)}" placeholder="La mia scheda"></label>${blocks}
  <button class="big-btn" id="mbAddDay">+ Aggiungi giornata</button>
  <button class="big-btn primary" id="mbReview">Controlla e salva scheda</button>
  <button class="big-btn" id="mbClose">Salva bozza ed esci</button>`);
  document.querySelectorAll('[data-mb-day]').forEach((el,i)=>el.querySelector('[data-mb-weekday]').value=manualDraft.days[i].weekday==null?'':String(manualDraft.days[i].weekday));
  document.querySelectorAll('[data-mb-add-ex]').forEach(b=>b.onclick=()=>{captureManual();const i=Number(b.dataset.mbAddEx);manualDraft.days[i].exercises.push(blankManualExercise());persistManual();renderManualBuilder();});
+ document.querySelectorAll('[data-mb-move-ex]').forEach(b=>b.onclick=()=>{
+  captureManual();
+  const [dayIndex,exIndex,direction]=b.dataset.mbMoveEx.split(':').map(Number);
+  const exercises=manualDraft.days[dayIndex]?.exercises;
+  const target=exIndex+direction;
+  if(!exercises||target<0||target>=exercises.length)return;
+  [exercises[exIndex],exercises[target]]=[exercises[target],exercises[exIndex]];
+  persistManual();renderManualBuilder();showToast('Ordine esercizi aggiornato nella bozza');
+ });
+ document.querySelectorAll('[data-mb-move-day]').forEach(b=>b.onclick=()=>{
+  captureManual();
+  const [index,direction]=b.dataset.mbMoveDay.split(':').map(Number);
+  const target=index+direction;
+  if(target<0||target>=manualDraft.days.length)return;
+  [manualDraft.days[index],manualDraft.days[target]]=[manualDraft.days[target],manualDraft.days[index]];
+  persistManual();renderManualBuilder();showToast('Ordine giornate aggiornato nella bozza');
+ });
  document.querySelectorAll('[data-mb-remove-ex]').forEach(b=>b.onclick=()=>{captureManual();const [i,j]=b.dataset.mbRemoveEx.split(':').map(Number);manualDraft.days[i].exercises.splice(j,1);persistManual();renderManualBuilder();});
  document.querySelectorAll('[data-mb-remove-day]').forEach(b=>b.onclick=()=>{captureManual();if(manualDraft.days.length===1){alert('Serve almeno una giornata.');return;}manualDraft.days.splice(Number(b.dataset.mbRemoveDay),1);persistManual();renderManualBuilder();});
  $('mbAddDay').onclick=()=>{captureManual();if(manualDraft.days.length>=7){alert('Massimo 7 giornate.');return;}const used=new Set(manualDraft.days.map(d=>d.weekday));const next=[1,2,3,4,5,6,7].find(x=>!used.has(x));manualDraft.days.push(blankManualDay(isFlexibleSchedule()?null:(next||1)));persistManual();renderManualBuilder();};
@@ -1404,7 +1426,7 @@ function openDocumentReference(){
 function openProgramManager(){
   openSheet(`<h2>Gestione schede</h2><div class="sub">Programma attivo: ${safe(programName())} · ${PROGRAM.length} giornate. Ogni dispositivo conserva i propri dati.</div>
     <button class="big-btn primary" id="startGuide">Crea o importa una scheda</button>
-    <button class="big-btn" id="manualProgram">Crea / modifica scheda manualmente</button>
+    <button class="big-btn" id="manualProgram">✎ Modifica e riordina esercizi / giornate</button>
     <button class="big-btn" id="textProgram">Incolla esercizi come testo</button>
     <button class="big-btn" id="imageProgram">Usa foto o PDF come riferimento</button>
     <button class="big-btn" id="importProgram">Importa JSON da file</button>
