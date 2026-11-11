@@ -418,6 +418,30 @@ function setProgram(obj){
   PROGRAM=clean; window.ACTIVE_PROGRAM_NAME=name;
   saveProgram(); rebuildMuscles(); state.dayId=PROGRAM[0].id; renderDays(); renderList();
 }
+/* v2.7: kg come unità interna; lb solo in visualizzazione e inserimento. */
+const KG_PER_LB = 0.45359237;
+function weightUnit(ex){return ex.weightUnit === "lb" ? "lb" : "kg";}
+function toStoredKg(value, ex){
+  if(value === "" || value == null)return "";
+  const n=Number(String(value).replace(",","."));
+  if(!Number.isFinite(n) || n<0)return "";
+  return String(Math.round((weightUnit(ex)==="lb" ? n*KG_PER_LB : n)*10000)/10000);
+}
+function fromStoredKg(value, ex){
+  if(value === "" || value == null)return "";
+  const n=Number(value);if(!Number.isFinite(n))return "";
+  const display=weightUnit(ex)==="lb" ? n/KG_PER_LB : n;
+  return String(Math.round(display*100)/100);
+}
+function weightText(value,ex){const n=fromStoredKg(value,ex);return n===""?"—":n+" "+weightUnit(ex);}
+function exerciseDoneForDate(d){
+  if(!d||!d.ex?.length)return false;
+  return d.ex.every(ex=>{const entry=exEntry(ex);return entry && entry.sets.length && entry.sets.every(x=>x.d);});
+}
+function showSessionComplete(){
+  openSheet(`<h2>Allenamento completato!</h2><p>Complimenti! Hai completato tutte le serie di <b>${safe(day().title)}</b> del ${safe(dmy(state.date))}.</p><p class="sub">Ottimo lavoro. Non serve un altro recupero: la seduta è terminata.</p><button class="big-btn primary" id="closeFinishedSession">Termina e torna alla scheda</button>`);
+  $("closeFinishedSession").onclick=()=>{closeSheet();showToast("Seduta completata con successo!");};
+}
 const MUSCLE_OPTIONS = ["Petto","Dorso","Spalle","Bicipiti","Tricipiti","Quadricipiti","Femorali","Glutei","Adduttori","Polpacci","Core","Collo","Altro"];
 function validateProgram(obj, rejectEmpty){
   const root = obj && (obj.program || obj);
@@ -449,8 +473,10 @@ function validateProgram(obj, rejectEmpty){
       const rir = Number(e.rir ?? 2);
       if(!Number.isFinite(rir)||rir<0||rir>6) throw Error(name+": RIR deve essere tra 0 e 6.");
       const muscle = String(e.muscle || e.primaryMuscle || "Altro").trim();
+      const weightUnitValue=String(e.weightUnit || e.weight_unit || "kg").toLowerCase();
+      if(!["kg","lb","lbs"].includes(weightUnitValue))throw Error(name+": unità di carico non valida (kg o lb).");
       if(!MUSCLE_OPTIONS.includes(muscle)) throw Error(name+": muscolo non riconosciuto: "+muscle);
-      return { id:/^[a-zA-Z0-9_-]{1,90}$/.test(String(e.id||""))?String(e.id):`d${i}e${j}`, name, sets, reps, rest, muscle, rir, load:["heavy","medium","light"].includes(e.load)?e.load:"medium",loadTxt:"Personalizzato", tip:String(e.tip||e.notes||`RIR ${rir}. Mantieni una tecnica controllata.`).slice(0,500),bw:Boolean(e.bw),variants:Array.isArray(e.variants)?e.variants.filter(v=>typeof v==="string").slice(0,8).map(v=>v.slice(0,90)):[]};
+      return { id:/^[a-zA-Z0-9_-]{1,90}$/.test(String(e.id||""))?String(e.id):`d${i}e${j}`, name, sets, reps, rest, muscle, rir, weightUnit:weightUnitValue==="lbs"?"lb":weightUnitValue, load:["heavy","medium","light"].includes(e.load)?e.load:"medium",loadTxt:"Personalizzato", tip:String(e.tip||e.notes||`RIR ${rir}. Mantieni una tecnica controllata.`).slice(0,500),bw:Boolean(e.bw),variants:Array.isArray(e.variants)?e.variants.filter(v=>typeof v==="string").slice(0,8).map(v=>v.slice(0,90)):[]};
     });
     return {weekday:wd,id:/^[a-zA-Z0-9_-]{1,90}$/.test(String(d.id||""))?String(d.id):`day${i}`, tab:String(d.tab||d.name||`G${i+1}`).slice(0,12),tabSub:String(d.tabSub||"Scheda").slice(0,20),title:String(d.title||d.name||`Giorno ${i+1}`).slice(0,85),sub:String(d.sub||"Scheda importata").slice(0,100),note:String(d.note||"").slice(0,600),ex};
   });
@@ -556,7 +582,7 @@ function previousWorkoutBox(ex,variant){
   if(!last)return "";
   const sets=last.sets.filter(s=>s.d && s.r!=="" && s.r!=null);
   if(!sets.length)return "";
-  const items=sets.map((s,i)=>`<span class="pill">${i+1}ª: <b>${safe(s.r)} rip.</b>${ex.bw ? (Number(s.w)>0?" · +"+safe(s.w)+" kg":" · corpo libero") : (s.w!==""?" · "+safe(s.w)+" kg":"")}</span>`).join("");
+  const items=sets.map((s,i)=>`<span class="pill">${i+1}ª: <b>${safe(s.r)} rip.</b>${ex.bw ? (Number(s.w)>0?" · +"+safe(weightText(s.w,ex)):" · corpo libero") : (s.w!==""?" · "+safe(weightText(s.w,ex)):"")}</span>`).join("");
   return `<div class="previous-workout"><strong>ULTIMA VOLTA · ${dmy(last.date)}</strong><div class="line">${items}</div><div class="muted">Questi valori sono lo storico registrato, non obiettivi ancora da completare.</div></div>`;
 }
 function suggestion(ex,variant){
@@ -572,7 +598,7 @@ function suggestion(ex,variant){
   const sameLoad=hasWeights && weightValues.every(v=>v===weightValues[0]);
   const total=reps.reduce((a,b)=>a+b,0);
   const commonLoad=sameLoad ? weightValues[0] : null;
-  const loadText=ex.bw?(commonLoad>0?`+${commonLoad} kg di zavorra`:`il corpo libero`):commonLoad!==null?`${commonLoad} kg`:`il carico precedente`;
+  const loadText=ex.bw?(commonLoad>0?`+${weightText(commonLoad,ex)} di zavorra`:`il corpo libero`):commonLoad!==null?`${weightText(commonLoad,ex)}`:`il carico precedente`;
   if(completed.length!==ex.sets)return `Hai registrato ${completed.length} serie su ${ex.sets} previste. <b>Ripeti il carico e completa il programma</b> prima di aumentarlo.`;
   if(!sameLoad && !ex.bw)return `L'ultima seduta contiene carichi diversi o mancanti: <b>consolida le serie</b> e confronta tecnica e ripetizioni; nessun aumento automatico.`;
   if(reps.some(n=>n<min))return `Ultima seduta: ${reps.join(" / ")} rip. (totale ${total}), almeno una serie sotto ${min}. <b>Consolida ${loadText}</b> o riducilo se la tecnica peggiora.`;
@@ -618,8 +644,8 @@ function renderList(){
     const last = lastPerformance(ex, variant);
     const best = bestWeightBefore(ex, variant);
     const allDone = rows.length && rows.every(s => s.d);
-    const unit = ex.unit === "sec" ? "sec" : "kg";
-    const wPh = ex.bw ? "0" : "kg";
+    const unit = ex.unit === "sec" ? "sec" : weightUnit(ex);
+    const wPh = ex.bw ? "0" : unit;
     const sugg = suggestion(ex, variant);
 
     const setRows = rows.map((s,i) => {
@@ -628,7 +654,7 @@ function renderList(){
       return `
       <div class="set-row ${s.d?"done":""} ${isPR?"pr":""}" data-ex="${ex.id}" data-i="${i}">
         <div class="set-n num">${i+1}</div>
-        <div class="fld">${isPR?'<span class="pr-star">🏆</span>':''}<input type="number" inputmode="decimal" step="0.5" class="num w" placeholder="${wPh}" value="${safeAttr(s.w)}"></div>
+        <div class="fld">${isPR?'<span class="pr-star">🏆</span>':''}<input type="number" inputmode="decimal" step="0.1" class="num w" placeholder="${wPh}" value="${safeAttr(fromStoredKg(s.w,ex))}"></div>
         <div class="fld"><input type="number" inputmode="numeric" class="num r" placeholder="${safeAttr(ex.reps)}" value="${safeAttr(s.r)}"></div>
         <button class="chk" aria-label="Serie completata">✓</button>
       </div>`;
@@ -643,7 +669,7 @@ function renderList(){
           <div class="ex-meta">
             <span class="num">${ex.sets}×${ex.reps}</span>
             <span><i class="dot ${ex.load}"></i>${safe(ex.loadTxt)}</span>
-            <span>⏱ ${fmt(effectiveRest(ex))}</span>
+            <span>⏱ ${fmt(effectiveRest(ex))}</span><span>⚖ ${weightUnit(ex)}</span>
           </div>
         </div>
         <button class="info-btn" data-variant="${ex.id}" aria-label="Cambia variante">⇄</button>
@@ -653,7 +679,7 @@ function renderList(){
       ${previousWorkoutBox(ex, variant)}
       ${sugg ? `<div class="suggest"><b>→</b><span>${sugg}</span></div>` : ""}
       <div class="sets">
-        <div class="set-head"><span></span><span>${unit==="sec"?"zav.":"Carico (kg)"}</span><span>${unit==="sec"?"Secondi":"Reps"}</span><span></span></div>
+        <div class="set-head"><span></span><span>${unit==="sec"?"zav.":"Carico (${unit})"}</span><span>${unit==="sec"?"Secondi":"Reps"}</span><span></span></div>
         ${setRows}
         ${String(getProfile().limitations||"").trim() ? `<div class="last">Se hai limitazioni attive, segui le indicazioni del professionista e modifica l'esercizio se necessario.</div>` : ""}
         <div class="set-actions">
@@ -719,7 +745,7 @@ document.addEventListener("input", e => {
   if(!row) return;
   const ex = day().ex.find(x => x.id === row.dataset.ex);
   const entry = exEntry(ex, true);
-  entry.sets[+row.dataset.i][e.target.classList.contains("w") ? "w" : "r"] = e.target.value;
+  entry.sets[+row.dataset.i][e.target.classList.contains("w") ? "w" : "r"] = e.target.classList.contains("w") ? toStoredKg(e.target.value,ex) : e.target.value;
   Store.save();
 });
 
@@ -742,7 +768,15 @@ function toggleSet(row){
     const w = parseFloat(s.w);
     if(!ex.bw && best !== null && !isNaN(w) && w > best){
       const label = entry.variant !== ex.name ? `${ex.name} (${entry.variant})` : ex.name;
-      showToast(`🏆 Nuovo record su ${label}: ${w} kg`);
+      showToast(`🏆 Nuovo record su ${label}: ${weightText(w,ex)}`);
+    }
+    // Non avviare il recupero dopo l'ultima serie della giornata.
+    Store.save();
+    if(exerciseDoneForDate(day())){
+      stopTimer();
+      renderList();
+      showSessionComplete();
+      return;
     }
     startTimer(effectiveRest(ex), ex.name);
   }
@@ -913,7 +947,7 @@ function closeSheet(){
 }
 $("sheetBg").onclick = closeSheet;
 
-function buildChart(points){
+function buildChart(points, chartUnit="kg"){
   if(points.length < 2) return "";
   const w=280, h=90, pad=10;
   const vals = points.map(p => p.value);
@@ -930,7 +964,7 @@ function buildChart(points){
   return `<div class="chart-box">
     <div style="font-size:.78rem;color:var(--muted);margin-bottom:4px">Andamento carico</div>
     <svg viewBox="0 0 ${w} ${h}" class="chart"><polyline points="${line}" fill="none" stroke="var(--accent)" stroke-width="2"/>${dots}</svg>
-    <div class="chart-range"><span>${min} kg</span><span>${max} kg</span></div>
+    <div class="chart-range"><span>${Math.round(min*100)/100} ${chartUnit}</span><span>${Math.round(max*100)/100} ${chartUnit}</span></div>
   </div>`;
 }
 
@@ -947,20 +981,20 @@ function openHistory(exId){
 
   const chartPoints = entries.filter(x => x.raw.variant === refVariant).map(x => {
     const weights = x.raw.sets.map(s => parseFloat(s.w)).filter(n => !isNaN(n));
-    return weights.length ? {date:x.k.split("__")[0], value: Math.max(...weights)} : null;
+    return weights.length ? {date:x.k.split("__")[0], value: Math.max(...weights)*(weightUnit(ex)==="lb" ? 1/KG_PER_LB : 1)} : null;
   }).filter(Boolean);
 
   const rows = entries.slice().reverse().slice(0,12).map(x => {
     const sets = x.raw.sets.filter(s => s.w || s.r);
     const weights = sets.map(s=>parseFloat(s.w)).filter(n=>!isNaN(n));
-    const topW = weights.length ? Math.max(...weights) : null;
+    const topW = weights.length ? Math.max(...weights)*(weightUnit(ex)==="lb" ? 1/KG_PER_LB : 1) : null;
     const date = x.k.split("__")[0];
     let isPR = false;
     if(topW !== null && x.raw.variant === refVariant){
       const bestSoFar = Math.max(...chartPoints.filter(p=>p.date<=date).map(p=>p.value), -Infinity);
       isPR = topW === bestSoFar && chartPoints.find(p=>p.value===topW)?.date === date;
     }
-    const setsTxt = sets.map(s => `${s.w||"–"}×${s.r||"–"}`).join("  ·  ");
+    const setsTxt = sets.map(s => `${s.w!==""?weightText(s.w,ex):"–"} × ${s.r||"–"}`).join("  ·  ");
     const vol = x.raw.sets.reduce((a,s)=> a + (parseFloat(s.w)||0)*(parseFloat(s.r)||0), 0);
     const variantTag = x.raw.variant !== ex.name ? `<span class="pr-tag" style="color:var(--muted)">· ${safe(x.raw.variant)}</span>` : "";
     return `<div class="hist"><b>${date.split("-").reverse().join("/")}</b>${isPR?'<span class="pr-tag">🏆 PR</span>':''}${variantTag}
@@ -968,7 +1002,7 @@ function openHistory(exId){
   }).join("");
 
   openSheet(`<h2>${safe(ex.name)}</h2><div class="sub">Ultimi allenamenti registrati${refVariant!==ex.name?` · grafico su "${refVariant}"`:""}</div>
-    ${buildChart(chartPoints)}
+    ${buildChart(chartPoints,weightUnit(ex))}
     ${rows || '<div class="empty">Nessun dato ancora. Compila i campi e spunta le serie: da qui in poi vedrai i progressi.</div>'}
     <button class="big-btn" onclick="closeSheet()">Chiudi</button>`);
 }
@@ -1235,8 +1269,8 @@ const EXERCISE_MUSCLES = [
 function recognizeMuscle(name){return EXERCISE_MUSCLES.find(([re])=>re.test(name))?.[1]||null;}
 const COACH_PROMPT = `Agisci come un preparatore atletico basato sulle evidenze. Crea una scheda personalizzata in base al profilo che ti fornirò. Non formulare diagnosi e non dichiarare sicuri esercizi per eventuali infortuni.
 Restituisci SOLO un oggetto JSON valido, senza markdown o testo aggiuntivo, con questa struttura:
-{"schemaVersion":"1.0","program":{"name":"Nome programma","days":[{"name":"Lunedì - Pull","tab":"Lun","weekday":1,"sub":"Focus dorsali","note":"Indicazioni facoltative","exercises":[{"name":"Lat machine presa neutra","sets":3,"reps":{"min":8,"max":12},"rir":2,"restSeconds":180,"muscle":"Dorso","notes":"Consigli tecnici sintetici","variants":["Lat machine convergente"]}]}]}}
-Usa solo questi valori per muscle: Petto, Dorso, Spalle, Bicipiti, Tricipiti, Quadricipiti, Femorali, Glutei, Adduttori, Polpacci, Core, Collo, Altro. Se scheduleMode è "flexible", genera esattamente sessionsPerWeek giornate ordinate (A, B, C...) e usa weekday:null: l’atleta sceglierà quando allenarsi, senza giorni fissi. Se è "fixed", ogni giornata deve avere weekday: 1=lunedì, 2=martedì, 3=mercoledì, 4=giovedì, 5=venerdì, 6=sabato, 7=domenica, rispettando esattamente i giorni selezionati nel profilo. Da 1 a 7 giornate e da 1 a 25 esercizi/giorno, serie 1–10, recupero 15–600 secondi. Evita esercizi contro le limitazioni che descriverò, segnala la necessità di valutazione sanitaria se pertinente e non inventare dati. Non includere nome, data di nascita o dati sanitari nel JSON della scheda. Le limitazioni servono soltanto per scegliere esercizi appropriati: se ci sono segnala che serve parere professionale, non formulare diagnosi. Considera anche il campo goalDetails, la durata massima, attrezzatura e preferenze. Imposta restSeconds per ogni esercizio; se restMode è global, usa defaultRestSeconds come preferenza di partenza, salvo giustificazioni tecniche.
+{"schemaVersion":"1.0","program":{"name":"Nome programma","days":[{"name":"Lunedì - Pull","tab":"Lun","weekday":1,"sub":"Focus dorsali","note":"Indicazioni facoltative","exercises":[{"name":"Lat machine presa neutra","sets":3,"reps":{"min":8,"max":12},"rir":2,"restSeconds":180,"weightUnit":"kg","muscle":"Dorso","notes":"Consigli tecnici sintetici","variants":["Lat machine convergente"]}]}]}}
+Usa solo questi valori per muscle: Petto, Dorso, Spalle, Bicipiti, Tricipiti, Quadricipiti, Femorali, Glutei, Adduttori, Polpacci, Core, Collo, Altro. Se scheduleMode è "flexible", genera esattamente sessionsPerWeek giornate ordinate (A, B, C...) e usa weekday:null: l’atleta sceglierà quando allenarsi, senza giorni fissi. Se è "fixed", ogni giornata deve avere weekday: 1=lunedì, 2=martedì, 3=mercoledì, 4=giovedì, 5=venerdì, 6=sabato, 7=domenica, rispettando esattamente i giorni selezionati nel profilo. Da 1 a 7 giornate e da 1 a 25 esercizi/giorno, serie 1–10, recupero 15–600 secondi. Evita esercizi contro le limitazioni che descriverò, segnala la necessità di valutazione sanitaria se pertinente e non inventare dati. Non includere nome, data di nascita o dati sanitari nel JSON della scheda. Le limitazioni servono soltanto per scegliere esercizi appropriati: se ci sono segnala che serve parere professionale, non formulare diagnosi. Considera anche il campo goalDetails, la durata massima, attrezzatura e preferenze. Imposta restSeconds e weightUnit ("kg" oppure "lb") per ogni esercizio; se restMode è global, usa defaultRestSeconds come preferenza di partenza, salvo giustificazioni tecniche.
 
 PROFILO E PREFERENZE DA CONSIDERARE (scrivo qui sotto):
 `;
@@ -1311,12 +1345,12 @@ const MANUAL_DRAFT_KEY="progym_manual_draft_v24";
 const WEEKDAYS=["","Lunedì","Martedì","Mercoledì","Giovedì","Venerdì","Sabato","Domenica"];
 let manualDraft=null;
 function blankManualDay(weekday=1){return {name:(WEEKDAYS[weekday]||'Giornata')+' · Allenamento',weekday,exercises:[]};}
-function blankManualExercise(){const p=getProfile();return {name:"",sets:3,reps:"8-12",restSeconds:Number(p.defaultRestSeconds)||180,muscle:"Altro",notes:""};}
+function blankManualExercise(){const p=getProfile();return {name:"",sets:3,reps:"8-12",restSeconds:Number(p.defaultRestSeconds)||180,muscle:"Altro",weightUnit:"kg",notes:""};}
 function openManualBuilder(){
  try{manualDraft=JSON.parse(localStorage.getItem(MANUAL_DRAFT_KEY));}catch(_){manualDraft=null;}
  if(!manualDraft){
   if(PROGRAM.length){
-   manualDraft={name:programName(),days:PROGRAM.map(d=>({id:d.id,name:d.title,weekday:d.weekday,exercises:d.ex.map(e=>({id:e.id,name:e.name,sets:e.sets,reps:e.reps,restSeconds:e.rest,muscle:e.muscle,notes:e.tip||""}))}))};
+   manualDraft={name:programName(),days:PROGRAM.map(d=>({id:d.id,name:d.title,weekday:d.weekday,exercises:d.ex.map(e=>({id:e.id,name:e.name,sets:e.sets,reps:e.reps,restSeconds:e.rest,muscle:e.muscle,weightUnit:weightUnit(e),notes:e.tip||""}))}))};
   }else{const p=getProfile();const wd=p.scheduleMode==="flexible"?null:(p.trainingWeekdays?.[0]||1);manualDraft={name:"La mia scheda",days:[blankManualDay(wd)]};}
  }
  renderManualBuilder();
@@ -1337,6 +1371,7 @@ function captureManual(){
    e.reps=en.querySelector('[data-mb-reps]').value.trim();
    e.restSeconds=Number(en.querySelector('[data-mb-rest]').value);
    e.muscle=en.querySelector('[data-mb-muscle]').value;
+   e.weightUnit=en.querySelector('[data-mb-unit]').value;
    e.notes=en.querySelector('[data-mb-notes]').value.slice(0,500);
   });
  });persistManual();
@@ -1352,10 +1387,11 @@ function renderManualBuilder(){
  <label class="profile-field">Nome esercizio<input data-mb-exname value="${safeAttr(e.name)}" placeholder="Es. Lat machine presa neutra"></label>
  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><label class="profile-field">Serie<input type="number" min="1" max="10" data-mb-sets value="${e.sets}"></label><label class="profile-field">Ripetizioni<input data-mb-reps value="${safeAttr(e.reps)}" placeholder="8-12"></label></div>
  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><label class="profile-field">Recupero (sec)<input type="number" min="15" max="600" step="15" data-mb-rest value="${e.restSeconds}"></label><label class="profile-field">Gruppo muscolare<select data-mb-muscle>${MUSCLE_OPTIONS.map(m=>`<option ${m===e.muscle?'selected':''}>${m}</option>`).join('')}</select></label></div>
+ <label class="profile-field">Unità del carico<select data-mb-unit><option value="kg" ${e.weightUnit!=="lb"?'selected':''}>Chilogrammi (kg)</option><option value="lb" ${e.weightUnit==="lb"?'selected':''}>Libbre (lb)</option></select></label>
  <label class="profile-field">Indicazioni (facoltative)<input data-mb-notes value="${safeAttr(e.notes||'')}" placeholder="Es. movimento controllato"></label>
  </div>`).join('')}
  <button class="big-btn" data-mb-add-ex="${i}">+ Aggiungi esercizio</button></div>`).join('');
- openSheet(`<h2>Modifica e riordina la scheda</h2><div class="sub">Puoi cambiare serie, ripetizioni, esercizi e recuperi. Usa le frecce ↑ ↓ per riordinare esercizi e giornate: i valori inseriti vengono conservati anche durante gli spostamenti. <b>Premi “Controlla e salva scheda” per rendere effettive le modifiche.</b> Lo storico passato non viene cancellato.</div>
+ openSheet(`<h2>Modifica e riordina la scheda</h2><div class="sub">Puoi cambiare serie, ripetizioni, unità kg/lb, esercizi e recuperi. I carichi già registrati sono conservati internamente in kg e mostrati nella nuova unità senza modificarne il valore reale. Usa le frecce ↑ ↓ per riordinare esercizi e giornate: i valori inseriti vengono conservati anche durante gli spostamenti. <b>Premi “Controlla e salva scheda” per rendere effettive le modifiche.</b> Lo storico passato non viene cancellato.</div>
  <label class="profile-field">Nome programma<input id="mbName" value="${safeAttr(manualDraft.name)}" placeholder="La mia scheda"></label>${blocks}
  <button class="big-btn" id="mbAddDay">+ Aggiungi giornata</button>
  <button class="big-btn primary" id="mbReview">Controlla e salva scheda</button>
@@ -1442,7 +1478,7 @@ function openProgramManager(){
   $("imageProgram").onclick=openDocumentReference;
   $("importProgram").onclick=selectProgramFile;
   $("pasteProgram").onclick=openPasteProgram;
-  $("exportProgram").onclick=()=>{if(!PROGRAM.length){alert("Prima crea o importa una scheda.");return;}downloadJson({schemaVersion:"1.0",program:{name:programName(),days:PROGRAM.map(d=>({name:d.title,tab:d.tab,weekday:d.weekday,sub:d.sub,note:d.note,exercises:d.ex.map(e=>({name:e.name,sets:e.sets,reps:e.reps,rir:e.rir??2,restSeconds:e.rest,muscle:e.muscle,notes:e.tip,variants:e.variants||[],bw:!!e.bw}))}))}},"scheda-personale.json");};
+  $("exportProgram").onclick=()=>{if(!PROGRAM.length){alert("Prima crea o importa una scheda.");return;}downloadJson({schemaVersion:"1.0",program:{name:programName(),days:PROGRAM.map(d=>({name:d.title,tab:d.tab,weekday:d.weekday,sub:d.sub,note:d.note,exercises:d.ex.map(e=>({name:e.name,sets:e.sets,reps:e.reps,rir:e.rir??2,restSeconds:e.rest,muscle:e.muscle,notes:e.tip,weightUnit:weightUnit(e),variants:e.variants||[],bw:!!e.bw}))}))}},"scheda-personale.json");};
   $("copyPrompt").onclick=copyProfilePrompt;
   $("resetProgram").onclick=()=>{if(!confirm("Rimuovere la scheda attiva? Lo storico degli allenamenti non verrà cancellato."))return;PROGRAM=[];window.ACTIVE_PROGRAM_NAME="";localStorage.removeItem(PKEY);rebuildMuscles();state.dayId=null;closeSheet();renderDays();renderList();renderWelcome();};
 }
@@ -1460,7 +1496,7 @@ async function importProgramText(txt, onSuccess){
     const name=String((obj.program||obj).name||"Scheda personalizzata");
     const dayNames=["","Lunedì","Martedì","Mercoledì","Giovedì","Venerdì","Sabato","Domenica"];
     const total=checkedDays.reduce((n,d)=>n+d.ex.length,0);
-    const blocks=checkedDays.map(d=>`<div class="preview-day"><b>${safe(dayNames[d.weekday]||d.title)} · ${safe(d.title)}</b><small>${d.ex.length} esercizi · ${d.ex.reduce((n,e)=>n+e.sets,0)} serie</small><small>${d.ex.map(e=>`${safe(e.name)} (${e.sets}×${safe(e.reps)}, ${fmt(e.rest)})`).join(" · ")}</small></div>`).join("");
+    const blocks=checkedDays.map(d=>`<div class="preview-day"><b>${safe(dayNames[d.weekday]||d.title)} · ${safe(d.title)}</b><small>${d.ex.length} esercizi · ${d.ex.reduce((n,e)=>n+e.sets,0)} serie</small><small>${d.ex.map(e=>`${safe(e.name)} (${e.sets}×${safe(e.reps)}, ${fmt(e.rest)}, ${weightUnit(e)})`).join(" · ")}</small></div>`).join("");
     openSheet(`<h2>Anteprima della scheda</h2><div class="sub">${safe(name)} · ${checkedDays.length} giorni · ${total} esercizi. Controlla tutto prima di confermare.</div>${blocks}<p class="warn">L'importazione sostituirà la scheda attiva. Il vecchio storico non sarà cancellato, ma i nuovi esercizi avranno ID separati.</p><button class="big-btn primary" id="approveProgram">Conferma e importa</button><button class="big-btn" onclick="openSetupGuide(3)">Annulla</button>`);
     $("approveProgram").onclick=()=>{try{setProgram(obj);if(typeof onSuccess==="function")onSuccess();closeSheet();renderWelcome();showToast("Scheda importata correttamente");setActiveNav("workout");}catch(err){alert("Importazione non riuscita: "+err.message);}};
   }catch(e){alert("JSON non valido: "+e.message);}
