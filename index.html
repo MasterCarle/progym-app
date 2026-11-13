@@ -329,6 +329,38 @@ const KEY = "palestra_v1";
 const TKEY = "palestra_timer_v1";
 const PKEY = "palestra_program_v2";
 const PROFILE_KEY = "palestra_profile_v2";
+// v3.0: archiviazione versionata locale. Non pubblicare mai i backup personali.
+const ARCHIVE_KEY = "progym_program_archive_v30";
+const ACTIVE_VERSION_KEY = "progym_active_version_v30";
+const SESSION_VERSIONS_KEY = "progym_session_versions_v30";
+function readJSON(key, fallback){try{return JSON.parse(localStorage.getItem(key)) ?? fallback;}catch(_){return fallback;}}
+function writeJSON(key,value){localStorage.setItem(key,JSON.stringify(value));}
+function newVersionId(){return "pv_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,9);}
+function archiveList(){return readJSON(ARCHIVE_KEY,[]);}
+function currentVersion(){return localStorage.getItem(ACTIVE_VERSION_KEY)||"";}
+function snapshotActive(reason){
+ const raw=localStorage.getItem(PKEY);
+ if(!raw)return;
+ const list=archiveList(), id=currentVersion()||newVersionId();
+ if(list.some(x=>x.id===id))return;
+ const obj=JSON.parse(raw);
+ list.unshift({id,reason:reason||"Modifica scheda",savedAt:new Date().toISOString(),name:String(obj.program?.name||"Scheda"),program:obj});
+ writeJSON(ARCHIVE_KEY,list);
+}
+function stampSessionVersion(){
+ const k=sessionKey(), map=readJSON(SESSION_VERSIONS_KEY,{});
+ if(!map[k]){map[k]=currentVersion()||"legacy";writeJSON(SESSION_VERSIONS_KEY,map);}
+}
+// Dizionario conservativo: normalizza solo grafie, non assimila prese differenti.
+const EXERCISE_ALIASES={
+ "lat pulldown presa neutra":"lat machine presa neutra",
+ "lat pulldown presa prona":"lat machine presa prona",
+ "lat pulldown presa supina":"lat machine presa supina"
+};
+function biomechKey(name){
+ let n=String(name||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim().replace(/\s+/g," ");
+ return EXERCISE_ALIASES[n]||n;
+}
 const Store = (() => {
   let mem = null, ok = true;
   try { localStorage.setItem("__t","1"); localStorage.removeItem("__t"); }
@@ -387,19 +419,24 @@ function loadProgram(){
     if(obj){ PROGRAM = validateProgram(obj, false); window.ACTIVE_PROGRAM_NAME=String(obj.program?.name||"Scheda personalizzata").slice(0,80); }
   } catch(err){ console.warn("Programma personalizzato ignorato:", err); }
   rebuildMuscles();
+  if(PROGRAM.length && !currentVersion())localStorage.setItem(ACTIVE_VERSION_KEY,newVersionId());
 }
 function saveProgram(){localStorage.setItem(PKEY,JSON.stringify({schemaVersion:"1.0",program:{name:programName(),days:PROGRAM}}));}
 function programName(){return window.ACTIVE_PROGRAM_NAME || "Nessuna scheda caricata";}
-function setProgram(obj){
+function setProgram(obj, options={}){
   const clean = validateProgram(obj, true);
   const name = String((obj.program && obj.program.name)||obj.name||"Scheda personalizzata").slice(0,80);
+  // Salva un punto di ripristino PRIMA di sostituire la scheda attiva.
+  snapshotActive(options.reason||"Scheda precedente");
   // Identificativi diversi per ogni importazione: nessuna attribuzione erronea dello storico.
   const sessions=Object.values(Store.load().sessions||{});
   const historicalIds=new Set(sessions.flatMap(s=>Object.keys(s||{})));
   const matches=clean.flatMap(d=>d.ex).filter(e=>historicalIds.has(e.id)).length;
   // Ripristino esplicito per i vecchi utenti: mantiene gli ID solo con una corrispondenza storica reale.
   const restoreIds = obj.program?.restoreExistingIds===true && matches>=2;
-  if(obj.program?.manualEdit===true){
+  if(options.restoreArchive===true){
+    // La riattivazione conserva gli ID dell'archivio, già connessi allo storico.
+  }else if(obj.program?.manualEdit===true){
     // L'editor mantiene gli ID degli esercizi non modificati per preservare i confronti storici.
     const previous=new Map(PROGRAM.flatMap(d=>d.ex.map(e=>[e.id,e.name])));
     const knownDays=new Set(PROGRAM.map(d=>d.id));
@@ -416,6 +453,7 @@ function setProgram(obj){
     clean.forEach((d,i)=>{d.id=prefix+"d"+i; d.ex.forEach((e,j)=>e.id=prefix+"e"+i+"_"+j);});
   }
   PROGRAM=clean; window.ACTIVE_PROGRAM_NAME=name;
+  localStorage.setItem(ACTIVE_VERSION_KEY,newVersionId());
   saveProgram(); rebuildMuscles(); state.dayId=PROGRAM[0].id; renderDays(); renderList();
 }
 /* v2.7: kg come unità interna; lb solo in visualizzazione e inserimento. */
@@ -436,10 +474,12 @@ function fromStoredKg(value, ex){
 function weightText(value,ex){const n=fromStoredKg(value,ex);return n===""?"—":n+" "+weightUnit(ex);}
 function exerciseDoneForDate(d){
   if(!d||!d.ex?.length)return false;
-  return d.ex.every(ex=>{const entry=exEntry(ex);return entry && entry.sets.length && entry.sets.every(x=>x.d);});
+  return d.ex.every(ex=>{const entry=exEntry(ex);return entry && (entry.skipped===true || (entry.sets.length && entry.sets.every(x=>x.d)));});
 }
 function showSessionComplete(){
-  openSheet(`<h2>Allenamento completato!</h2><p>Complimenti! Hai completato tutte le serie di <b>${safe(day().title)}</b> del ${safe(dmy(state.date))}.</p><p class="sub">Ottimo lavoro. Non serve un altro recupero: la seduta è terminata.</p><button class="big-btn primary" id="closeFinishedSession">Termina e torna alla scheda</button>`);
+  const skipped=day().ex.filter(ex=>exEntry(ex)?.skipped);
+  const done=day().ex.reduce((n,ex)=>n+(exEntry(ex)?.skipped?0:(exEntry(ex)?.sets||[]).filter(x=>x.d).length),0);
+  openSheet(`<h2>Allenamento terminato!</h2><p>Hai completato <b>${done} serie</b> in <b>${safe(day().title)}</b> del ${safe(dmy(state.date))}.</p>${skipped.length?`<p class="warn">Esercizi saltati oggi (${skipped.length}): ${skipped.map(x=>safe(x.name)).join(", ")}. Non sono conteggiati nel volume effettivo.</p>`:""}<p class="sub">Non serve un altro recupero: la seduta è terminata.</p><button class="big-btn primary" id="closeFinishedSession">Termina e torna alla scheda</button>`);
   $("closeFinishedSession").onclick=()=>{closeSheet();showToast("Seduta completata con successo!");};
 }
 const MUSCLE_OPTIONS = ["Petto","Dorso","Spalle","Bicipiti","Tricipiti","Quadricipiti","Femorali","Glutei","Adduttori","Polpacci","Core","Collo","Altro"];
@@ -536,9 +576,10 @@ function exEntry(ex, create=false){
   const s = session(create);
   let raw = normalizeRaw(ex, s[ex.id]);
   if(!raw && create){
-    raw = {variant: ex.name, muscle:ex.muscle, sets: Array.from({length:ex.sets}, () => ({w:"",r:"",d:false}))};
+    stampSessionVersion();
+    raw = {variant: ex.name, identity:biomechKey(ex.name), muscle:ex.muscle, sets: Array.from({length:ex.sets}, () => ({w:"",r:"",d:false}))};
   }
-  if(raw && create) s[ex.id] = raw;
+  if(raw && create){if(!raw.identity)raw.identity=biomechKey(raw.variant||ex.name); s[ex.id] = raw;}
   return raw;
 }
 function lastPerformance(ex, variant){
@@ -547,7 +588,7 @@ function lastPerformance(ex, variant){
     .filter(k => k !== sessionKey() && k.split("__")[0] < state.date)
     .filter(k => {
       const raw = normalizeRaw(ex, db.sessions[k][ex.id]);
-      return raw && raw.variant === variant && raw.sets.some(s => s.d || s.w || s.r);
+      return raw && !raw.skipped && biomechKey(raw.variant||ex.name)===biomechKey(variant) && (!raw.identity || raw.identity===biomechKey(variant)) && raw.sets.some(s => s.d || s.w || s.r);
     })
     .sort().reverse();
   if(!keys.length) return null;
@@ -561,7 +602,7 @@ function bestWeightBefore(ex, variant){
   Object.keys(db.sessions).forEach(k => {
     if(k === curKey) return;
     const raw = normalizeRaw(ex, db.sessions[k][ex.id]);
-    if(!raw || raw.variant !== variant) return;
+    if(!raw || raw.skipped || biomechKey(raw.variant||ex.name)!==biomechKey(variant) || (raw.identity && raw.identity!==biomechKey(variant))) return;
     raw.sets.forEach(set => {
       const w = parseFloat(set.w);
       if(set.d && !isNaN(w) && (best === null || w > best)) best = w;
@@ -643,7 +684,8 @@ function renderList(){
     const isAlt = variant !== ex.name;
     const last = lastPerformance(ex, variant);
     const best = bestWeightBefore(ex, variant);
-    const allDone = rows.length && rows.every(s => s.d);
+    const skipped=entry?.skipped===true;
+    const allDone = skipped || (rows.length && rows.every(s => s.d));
     const unit = ex.unit === "sec" ? "sec" : weightUnit(ex);
     const wPh = ex.bw ? "0" : unit;
     const sugg = suggestion(ex, variant);
@@ -676,17 +718,18 @@ function renderList(){
         <button class="info-btn" data-tip="${ex.id}">i</button>
       </div>
       <div class="tip" id="tip-${ex.id}">${safe(ex.tip)}</div>
-      ${previousWorkoutBox(ex, variant)}
-      ${sugg ? `<div class="suggest"><b>→</b><span>${sugg}</span></div>` : ""}
+      ${skipped ? `<div class="previous-workout"><strong>Saltato in questa seduta</strong><div class="muted">${safe(entry.skipReason||"Nessun motivo indicato")}. La scheda originale non cambia.</div></div>` : previousWorkoutBox(ex, variant)}
+      ${!skipped && sugg ? `<div class="suggest"><b>→</b><span>${sugg}</span></div>` : ""}
       <div class="sets">
         <div class="set-head"><span></span><span>${unit==="sec"?"zav.":"Carico (${unit})"}</span><span>${unit==="sec"?"Secondi":"Reps"}</span><span></span></div>
-        ${setRows}
+        ${skipped ? `<button class="big-btn" data-unskip="${ex.id}">Ripristina esercizio per oggi</button>` : setRows}
         ${String(getProfile().limitations||"").trim() ? `<div class="last">Se hai limitazioni attive, segui le indicazioni del professionista e modifica l'esercizio se necessario.</div>` : ""}
         <div class="set-actions">
           <button class="mini" data-add="${ex.id}">+ serie</button>
           <button class="mini" data-del="${ex.id}">– serie</button>
           <button class="mini" data-hist="${ex.id}">Storico</button>
           <button class="mini" data-rest="${ex.id}">⏱ Recupero</button>
+          <button class="mini" data-skip="${ex.id}" ${skipped?"disabled":""}>Salta oggi</button>
         </div>
       </div>
     </section>`;
@@ -701,6 +744,7 @@ function updateProgress(){
   day().ex.forEach(ex => {
     const entry = exEntry(ex);
     const rows = entry ? entry.sets : Array.from({length:ex.sets},()=>({d:false}));
+    if(entry?.skipped===true)return;
     tot += rows.length;
     done += rows.filter(r => r.d).length;
   });
@@ -724,6 +768,10 @@ document.addEventListener("click", e => {
   const variantBtn = e.target.closest("[data-variant]");
   if(variantBtn){ openVariantPicker(variantBtn.dataset.variant); return; }
 
+  const skip=e.target.closest("[data-skip]");
+  if(skip){openSkipExercise(skip.dataset.skip);return;}
+  const unskip=e.target.closest("[data-unskip]");
+  if(unskip){setSkipped(unskip.dataset.unskip,false);return;}
   const chk = e.target.closest(".chk");
   if(chk){ toggleSet(chk.closest(".set-row")); return; }
 
@@ -749,9 +797,26 @@ document.addEventListener("input", e => {
   Store.save();
 });
 
+function openSkipExercise(exId){
+ const ex=day()?.ex.find(e=>e.id===exId);if(!ex)return;
+ openSheet(`<h2>Salta esercizio solo oggi</h2><p><b>${safe(ex.name)}</b> resterà nella scheda e tornerà disponibile nelle prossime sedute.</p>
+ <label class="profile-field">Motivo (facoltativo)<select id="skipReason"><option value="Attrezzo occupato">Attrezzo occupato</option><option value="Tempo insufficiente">Tempo insufficiente</option><option value="Recupero insufficiente">Recupero insufficiente</option><option value="Altro">Altro</option></select></label>
+ <button class="big-btn primary" id="confirmSkip">Salta per questa seduta</button><button class="big-btn" onclick="closeSheet()">Annulla</button>`);
+ $("confirmSkip").onclick=()=>setSkipped(exId,true,$("skipReason").value);
+}
+function setSkipped(exId,yes,reason=""){
+ const ex=day()?.ex.find(e=>e.id===exId);if(!ex)return;
+ const entry=exEntry(ex,true);
+ if(yes && entry.sets.some(s=>s.d||s.w!==""||s.r!=="") && !confirm("Questo esercizio contiene già serie registrate. Saltarlo ora le conserverà, ma non conteranno come eseguite. Continuare?"))return;
+ entry.skipped=!!yes;entry.skipReason=yes?reason:"";
+ Store.save();closeSheet();renderList();
+ if(yes){if(exerciseDoneForDate(day())){stopTimer();showSessionComplete();}else showToast("Esercizio saltato solo oggi");}
+ else showToast("Esercizio ripristinato");
+}
 function toggleSet(row){
   const ex = day().ex.find(x => x.id === row.dataset.ex);
   const entry = exEntry(ex, true);
+  if(entry.skipped)return;
   const rows = entry.sets;
   const i = +row.dataset.i;
   const s = rows[i];
@@ -1047,6 +1112,7 @@ function applyVariant(exId, variantName, newMuscle){
   const hasData = entry.sets.some(s => s.w || s.r || s.d);
   if(hasData && !confirm("Cambiare variante azzera le serie già inserite oggi per questo esercizio. Continuare?")) return;
   entry.variant = variantName;
+  entry.identity=biomechKey(variantName);
   entry.muscle = newMuscle || (variantName === ex.name ? ex.muscle : (entry.muscle || ex.muscle));
   entry.sets = Array.from({length: ex.sets}, () => ({w:"",r:"",d:false}));
   Store.save();
@@ -1075,7 +1141,7 @@ function weeklySets(dateStr){
       if(!(muscle in totals)) totals[muscle]=0;
       const raw = s[exId];
       const setsArr = Array.isArray(raw) ? raw : (raw && raw.sets) || [];
-      totals[muscle] += setsArr.filter(x => x.d).length;
+      totals[muscle] += raw?.skipped ? 0 : setsArr.filter(x => x.d).length;
     });
   });
   return {start, end, totals};
@@ -1145,7 +1211,7 @@ function exportMarkdown(){
 }
 
 function exportData(){
-  const blob = new Blob([JSON.stringify({sessions:Store.load().sessions,profile:getProfile(),restOverrides:getRestOverrides(),alarmSettings:getAlarmSettings(),activeProgram:localStorage.getItem(PKEY)?JSON.parse(localStorage.getItem(PKEY)):null})], {type:"application/json"});
+  const blob = new Blob([JSON.stringify({sessions:Store.load().sessions,profile:getProfile(),restOverrides:getRestOverrides(),alarmSettings:getAlarmSettings(),activeProgram:localStorage.getItem(PKEY)?JSON.parse(localStorage.getItem(PKEY)):null,programArchive:archiveList(),activeVersion:currentVersion(),sessionVersions:readJSON(SESSION_VERSIONS_KEY,{})})], {type:"application/json"});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = "palestra-backup-" + todayISO() + ".json";
@@ -1161,12 +1227,15 @@ function importData(){
       try{
         const obj = JSON.parse(rd.result);
         if(!obj.sessions) throw 0;
+        if(obj.activeProgram)validateProgram(obj.activeProgram,true);
         const cur = Store.load();
         Store.replace({sessions: Object.assign({}, cur.sessions, obj.sessions)});
         if(obj.profile && typeof obj.profile==="object") localStorage.setItem(PROFILE_KEY,JSON.stringify(obj.profile));
         if(obj.restOverrides && typeof obj.restOverrides==="object") localStorage.setItem(REST_OVERRIDES_KEY,JSON.stringify(obj.restOverrides));
         if(obj.alarmSettings && typeof obj.alarmSettings==="object")localStorage.setItem(ALARM_SETTINGS_KEY,JSON.stringify(obj.alarmSettings));
-        if(obj.activeProgram){validateProgram(obj.activeProgram,true); localStorage.setItem(PKEY,JSON.stringify(obj.activeProgram)); loadProgram();state.dayId=PROGRAM[0].id;renderDays();}
+        if(Array.isArray(obj.programArchive)){const older=archiveList(), seen=new Set(older.map(x=>x.id));obj.programArchive.forEach(x=>{if(x&&typeof x.id==="string"&&x.program&&!seen.has(x.id)){older.push(x);seen.add(x.id);}});writeJSON(ARCHIVE_KEY,older);}
+        if(obj.sessionVersions && typeof obj.sessionVersions==="object")writeJSON(SESSION_VERSIONS_KEY,{...readJSON(SESSION_VERSIONS_KEY,{}),...obj.sessionVersions});
+        if(obj.activeProgram){snapshotActive("Prima del ripristino backup");validateProgram(obj.activeProgram,true); localStorage.setItem(PKEY,JSON.stringify(obj.activeProgram)); loadProgram();state.dayId=PROGRAM[0].id;localStorage.setItem(ACTIVE_VERSION_KEY,obj.activeVersion||newVersionId());renderDays();}
         closeSheet(); renderDays();renderList();renderWelcome();
       }catch(e){ alert("File non valido: serve un backup creato da questa app."); }
     };
@@ -1459,10 +1528,26 @@ function openDocumentReference(){
  };
  $('sourceToManual').onclick=()=>openManualBuilder();$('sourceToText').onclick=openTextProgram;
 }
+function openProgramArchive(){
+ const list=archiveList();
+ const cards=list.map((a,i)=>`<div class="preview-day"><b>${safe(a.name||"Scheda")}</b><small>${safe(a.savedAt?.slice(0,10)||"")} · ${safe(a.reason||"Versione precedente")}</small><small>${Array.isArray(a.program?.program?.days)?a.program.program.days.length:0} giornate</small><div class="builder-controls" style="margin-top:10px"><button data-archive-preview="${i}">Consulta</button><button data-archive-clone="${i}">Clona / riattiva</button></div></div>`).join("");
+ openSheet(`<h2>Archivio schede</h2><p class="sub">Ogni modifica confermata archivia la versione precedente. Le sedute già registrate restano sul telefono, separate dalle schede.</p>${cards||'<p>Nessuna versione precedente. La prima verrà archiviata quando modifichi o sostituisci la scheda attuale.</p>'}<button class="big-btn" onclick="openProgramManager()">Indietro</button>`);
+ document.querySelectorAll('[data-archive-preview]').forEach(b=>b.onclick=()=>{
+  const a=list[Number(b.dataset.archivePreview)];const d=validateProgram(a.program,true);
+  openSheet(`<h2>${safe(a.name)}</h2>${d.map(x=>`<div class="preview-day"><b>${safe(x.title)}</b><small>${x.ex.map(e=>safe(e.name)+' · '+e.sets+'×'+safe(e.reps)).join(' · ')}</small></div>`).join('')}<button class="big-btn" id="backToArchive">Torna all'archivio</button>`);
+  $("backToArchive").onclick=openProgramArchive;
+ });
+ document.querySelectorAll('[data-archive-clone]').forEach(b=>b.onclick=()=>{
+  const a=list[Number(b.dataset.archiveClone)];
+  if(!confirm(`Riattivare una copia di “${a.name}”? La scheda attuale sarà archiviata; lo storico non verrà cancellato.`))return;
+  try{setProgram(a.program,{restoreArchive:true,reason:"Prima della riattivazione"});closeSheet();renderWelcome();showToast("Scheda riattivata dall'archivio");}catch(e){alert("Ripristino non riuscito: "+e.message);}
+ });
+}
 function openProgramManager(){
   openSheet(`<h2>Gestione schede</h2><div class="sub">Programma attivo: ${safe(programName())} · ${PROGRAM.length} giornate. Ogni dispositivo conserva i propri dati.</div>
     <button class="big-btn primary" id="startGuide">Crea o importa una scheda</button>
     <button class="big-btn" id="manualProgram">✎ Modifica e riordina esercizi / giornate</button>
+    <button class="big-btn" id="archiveProgram">Archivio versioni schede</button>
     <button class="big-btn" id="textProgram">Incolla esercizi come testo</button>
     <button class="big-btn" id="imageProgram">Usa foto o PDF come riferimento</button>
     <button class="big-btn" id="importProgram">Importa JSON da file</button>
@@ -1474,13 +1559,14 @@ function openProgramManager(){
     <button class="big-btn" onclick="closeSheet()">Chiudi</button>`);
   $("startGuide").onclick=()=>openSetupGuide(1);
   $("manualProgram").onclick=()=>openManualBuilder();
+  $("archiveProgram").onclick=openProgramArchive;
   $("textProgram").onclick=openTextProgram;
   $("imageProgram").onclick=openDocumentReference;
   $("importProgram").onclick=selectProgramFile;
   $("pasteProgram").onclick=openPasteProgram;
   $("exportProgram").onclick=()=>{if(!PROGRAM.length){alert("Prima crea o importa una scheda.");return;}downloadJson({schemaVersion:"1.0",program:{name:programName(),days:PROGRAM.map(d=>({name:d.title,tab:d.tab,weekday:d.weekday,sub:d.sub,note:d.note,exercises:d.ex.map(e=>({name:e.name,sets:e.sets,reps:e.reps,rir:e.rir??2,restSeconds:e.rest,muscle:e.muscle,notes:e.tip,weightUnit:weightUnit(e),variants:e.variants||[],bw:!!e.bw}))}))}},"scheda-personale.json");};
   $("copyPrompt").onclick=copyProfilePrompt;
-  $("resetProgram").onclick=()=>{if(!confirm("Rimuovere la scheda attiva? Lo storico degli allenamenti non verrà cancellato."))return;PROGRAM=[];window.ACTIVE_PROGRAM_NAME="";localStorage.removeItem(PKEY);rebuildMuscles();state.dayId=null;closeSheet();renderDays();renderList();renderWelcome();};
+  $("resetProgram").onclick=()=>{if(!confirm("Rimuovere la scheda attiva? Lo storico degli allenamenti non verrà cancellato."))return;snapshotActive("Scheda rimossa");localStorage.removeItem(ACTIVE_VERSION_KEY);PROGRAM=[];window.ACTIVE_PROGRAM_NAME="";localStorage.removeItem(PKEY);rebuildMuscles();state.dayId=null;closeSheet();renderDays();renderList();renderWelcome();};
 }
 async function importProgramText(txt, onSuccess){
   try{
