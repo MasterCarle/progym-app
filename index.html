@@ -1324,7 +1324,7 @@ function selectProgramFile(){
  const inp=document.createElement("input");inp.type="file";inp.accept=".json,application/json";
  inp.onchange=async()=>{try{const f=inp.files?.[0];if(!f)return;if(f.size>1024*1024)throw Error("File troppo grande (limite 1 MB).");await importProgramText(await f.text());}catch(e){alert("Importazione non riuscita: "+e.message);}};inp.click();
 }
-function openPasteProgram(){openSheet(`<h2>Importa scheda da ChatGPT o coach</h2><div class="sub">Incolla qui la risposta. Accetto JSON puro, JSON con titoli o blocchi <b>blocco JSON di ChatGPT</b>, oppure una scheda nel formato testuale guidato <b># Giorno</b> e <b>Esercizio | 3x8-12 | 180 | Dorso</b>. L'importazione avviene solo dopo la tua conferma.</div><textarea id="programJson" rows="12" style="width:100%;padding:12px;background:var(--surface-2);color:var(--text);border:1px solid var(--line);border-radius:10px;font:12px monospace" placeholder='Incolla la scheda JSON oppure il testo guidato...'></textarea><button class="big-btn primary" id="confirmPaste">Analizza e mostra anteprima</button><button class="big-btn" onclick="openSetupGuide(3)">Indietro</button>`);$("confirmPaste").onclick=()=>importProgramText($("programJson").value);}
+function openPasteProgram(){openSheet(`<h2>Importa scheda da ChatGPT o coach</h2><div class="sub">Incolla qui la risposta completa. Accetto JSON puro, JSON con titoli o blocchi di codice di ChatGPT, anche se la copia aggiunge escape alle parentesi, oppure una scheda nel formato testuale guidato <b># Giorno</b> e <b>Esercizio | 3x8-12 | 180 | Dorso</b>. L'importazione avviene solo dopo la tua conferma.</div><textarea id="programJson" rows="12" style="width:100%;padding:12px;background:var(--surface-2);color:var(--text);border:1px solid var(--line);border-radius:10px;font:12px monospace" placeholder='Incolla la scheda JSON oppure il testo guidato...'></textarea><button class="big-btn primary" id="confirmPaste">Analizza e mostra anteprima</button><button class="big-btn" onclick="openSetupGuide(3)">Indietro</button>`);$("confirmPaste").onclick=()=>importProgramText($("programJson").value);}
 document.querySelectorAll("[data-nav]").forEach(b=>b.onclick=()=>{
  const name=b.dataset.nav;setActiveNav(name);
  if(name==="workout"){closeSheet();window.scrollTo({top:0,behavior:"smooth"});}
@@ -1586,26 +1586,73 @@ function openProgramManager(){
   $("copyPromptText").onclick=()=>copyProfilePrompt('text');
   $("resetProgram").onclick=()=>{if(!confirm("Rimuovere la scheda attiva? Lo storico degli allenamenti non verrà cancellato."))return;snapshotActive("Scheda rimossa");localStorage.removeItem(ACTIVE_VERSION_KEY);PROGRAM=[];window.ACTIVE_PROGRAM_NAME="";localStorage.removeItem(PKEY);rebuildMuscles();state.dayId=null;closeSheet();renderDays();renderList();renderWelcome();};
 }
-// Cerca un oggetto JSON completo rispettando parentesi nei testi e stringhe escape.
-// Se ChatGPT aggiunge un'introduzione o un blocco markdown, recupera il solo oggetto.
-function extractProgramObject(input){
- const raw=String(input||'').replace(/^\uFEFF/,'').trim();
- if(!raw)throw Error('Non hai incollato alcuna scheda.');
- try{return JSON.parse(raw);}catch(_){/* prova a isolare il JSON */}
+// v3.0.2 — Correzione mirata dei caratteri di escape aggiunti copiando testo AI.
+// Non altera mai il contenuto delle stringhe JSON (nomi, note, varianti).
+// Esempio: {"variants": \["Lat neutra"\]} -> {"variants": ["Lat neutra"]}
+function fixCopiedJSONBrackets(source){
+ let output='', inString=false, escaped=false, fixes=0;
+ for(let i=0;i<source.length;i++){
+  const ch=source[i];
+  if(inString){
+   output+=ch;
+   if(escaped){escaped=false;continue;}
+   if(ch==='\\'){escaped=true;continue;}
+   if(ch==='"')inString=false;
+   continue;
+  }
+  if(ch==='"'){inString=true;output+=ch;continue;}
+  // Alcune interfacce di chat copiano le parentesi strutturali con uno slash.
+  // Ripara SOLO i backslash davanti a parentesi strutturali fuori dalle stringhe.
+  if(ch==='\\' && i+1<source.length && '[]{}'.includes(source[i+1])){
+   output+=source[i+1];i++;fixes++;continue;
+  }
+  output+=ch;
+ }
+ return {text:output,fixes};
+}
+// Estrae il primo oggetto di programma completo, senza scambiare le parentesi
+// presenti in note o nomi di esercizi con parentesi strutturali.
+function findProgramJSON(raw){
  for(let start=raw.indexOf('{');start>=0;start=raw.indexOf('{',start+1)){
   let depth=0,inString=false,escaped=false;
   for(let i=start;i<raw.length;i++){
    const ch=raw[i];
-   if(inString){if(escaped){escaped=false;continue;}if(ch==='\\'){escaped=true;continue;}if(ch==='"')inString=false;continue;}
+   if(inString){
+    if(escaped){escaped=false;continue;}
+    if(ch==='\\'){escaped=true;continue;}
+    if(ch==='"')inString=false;
+    continue;
+   }
    if(ch==='"'){inString=true;continue;}
    if(ch==='{')depth++;
-   if(ch==='}'){
-    depth--;
-    if(depth===0){try{const item=JSON.parse(raw.slice(start,i+1));if(item&&typeof item==='object'&&(item.program||item.days))return item;}catch(_){}break;}
+   if(ch==='}' && --depth===0){
+    try{
+     const candidate=JSON.parse(raw.slice(start,i+1));
+     if(candidate && typeof candidate==='object' && (candidate.program||candidate.days))return candidate;
+    }catch(_){}
+    break;
    }
   }
  }
- throw Error('Non ho trovato un JSON completo e leggibile. Chiedi a ChatGPT: «Restituisci nuovamente soltanto il JSON completo, senza testo aggiuntivo».');
+ return null;
+}
+function extractProgramObject(input){
+ const raw=String(input||'').replace(/^\uFEFF/,'').trim();
+ if(!raw)throw Error('Non hai incollato alcuna scheda.');
+ const normalized=fixCopiedJSONBrackets(raw);
+ // Prima accetta il JSON integro, poi una risposta AI con introduzioni / markdown.
+ for(const source of [raw,...(normalized.fixes?[normalized.text]:[])]){
+  try{
+   const item=JSON.parse(source);
+   if(item && typeof item==='object' && (item.program||item.days))return item;
+  }catch(_){}
+  const extracted=findProgramJSON(source);
+  if(extracted)return extracted;
+ }
+ if(/"schemaVersion"|"program"|"exercises"/.test(raw)){
+  throw Error('Il testo contiene una scheda JSON ma non è completo o contiene altri caratteri non validi. Verifica di aver copiato dall’inizio alla fine; puoi anche importare un file .json.');
+ }
+ throw Error('Non ho trovato una scheda JSON completa. Incolla l’intera risposta o usa il formato testuale guidato.');
 }
 function readProgramInput(txt){
  const raw=String(txt||'').trim();

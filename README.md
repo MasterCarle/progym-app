@@ -1,12 +1,12 @@
-# proGYM 3.0.1 — Importazione affidabile
+# proGYM 3.0.2 — Fix importazione ChatGPT su Samsung Internet
 
-Aggiornamento di proGYM 3.0.
+Patch compatibile con proGYM 3.0.1, senza reset delle chiavi dati.
 
-- Prompt più rigoroso: JSON completo e importabile, senza testo esterno.
-- Incolla universale: JSON puro, JSON preceduto/seguito da testo, blocchi markdown e scheda testuale guidata.
-- Anteprima e conferma prima di sostituire la scheda.
-- Messaggi di errore più espliciti.
-- Nessuna scheda personale nel codice pubblico.
-- Nessuna cancellazione volontaria di storico o profilo.
+- Ripara i caratteri `\[` / `\]` / `\{` / `\}` quando sono fuori dalle stringhe JSON, frequenti nella copia da alcune interfacce AI.
+- Mantiene integri nomi, note e varianti, anche se contengono caratteri speciali.
+- Continua ad accettare JSON puro, JSON in blocchi Markdown e scheda nel formato testuale guidato.
+- Rifiuta JSON realmente incompleto senza salvarne una parte.
+- L'importazione propone sempre l'anteprima prima di sostituire la scheda.
 
-**Attenzione**: esportare il backup completo prima dell’aggiornamento. Il parser del testo guidato non interpreta automaticamente ogni risposta libera.
+## Aggiornamento
+Esegui prima un backup JSON completo dall'app. Carica nel repository i file estratti dallo ZIP, sovrascrivendo quelli esistenti. Il backup dell'atleta non va caricato su GitHub.
