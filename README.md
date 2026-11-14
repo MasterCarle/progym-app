@@ -1,12 +1,16 @@
-# proGYM 3.0.2 — Fix importazione ChatGPT su Samsung Internet
+# proGYM 3.0.3 — Archivio schede e collegamento storico
 
-Patch compatibile con proGYM 3.0.1, senza reset delle chiavi dati.
+## Novità
+- Archivio: rinomina, data di archiviazione, data di creazione (soltanto se conosciuta), eliminazione confermata della singola copia. L’eliminazione non cancella le sedute.
+- Riconoscimento automatico conservativo se il nome normalizzato coincide e c’è un unico ID storico. Negli altri casi comando «Collega storico»: conferma manuale della variante, senza alterare ID o carichi.
+- Lo storico collegato alimenta «Ultima volta», suggerimenti e grafico delle prestazioni anche dopo l’importazione di una nuova scheda.
+- I collegamenti vengono inclusi nei backup e ripristinati in caso di importazione.
 
-- Ripara i caratteri `\[` / `\]` / `\{` / `\}` quando sono fuori dalle stringhe JSON, frequenti nella copia da alcune interfacce AI.
-- Mantiene integri nomi, note e varianti, anche se contengono caratteri speciali.
-- Continua ad accettare JSON puro, JSON in blocchi Markdown e scheda nel formato testuale guidato.
-- Rifiuta JSON realmente incompleto senza salvarne una parte.
-- L'importazione propone sempre l'anteprima prima di sostituire la scheda.
+## Precauzioni
+- Esportare un backup JSON completo dall'app PRIMA di aggiornare o eliminare archivi. Mai caricare backup personali sul repository pubblico.
+- Collegare soltanto esercizi biomeccanicamente equivalenti sulla stessa macchina comparabile. Prese e macchine diverse vanno tenute separate.
+- I backup 3.0.2 senza metadati non consentono di ricavare con certezza la vera data di creazione delle versioni storiche; l'app mostra la data di archiviazione.
+- Non cancellare la cronologia di Samsung Internet e non disinstallare la PWA durante l'aggiornamento.
 
-## Aggiornamento
-Esegui prima un backup JSON completo dall'app. Carica nel repository i file estratti dallo ZIP, sovrascrivendo quelli esistenti. Il backup dell'atleta non va caricato su GitHub.
+## Collaudo
+La sintassi JavaScript è stata verificata con Node.js. È necessario confermare su Samsung Internet l’associazione storica e il ripristino di backup prima di distribuirla ad altri.
