@@ -1286,24 +1286,36 @@ function openSetupGuide(step=1){
   const p=getProfile();
   openSheet(`<h2>Scheda con ChatGPT</h2><div class="sub">${p.goal?'Profilo disponibile: il prompt contiene obiettivi e preferenze.':'Prima compila il profilo per generare una richiesta personalizzata.'}</div>
    <button class="big-btn primary" id="guideProfile">${p.goal?'Modifica il profilo':'Compila il profilo'}</button>
-   <button class="big-btn" id="guideCopy">Copia il prompt personalizzato</button>
+   <button class="big-btn" id="guideCopy">Copia prompt per scheda JSON (consigliato)</button>
+   <button class="big-btn" id="guideCopyText">Copia prompt per scheda testuale</button>
    <button class="big-btn" id="guideChatGPT">Apri ChatGPT</button>
-   <button class="big-btn" id="guideStep3">Ho il JSON: importa</button>
+   <button class="big-btn" id="guideStep3">Ho la scheda: incolla o importa</button>
    <button class="big-btn" onclick="openSetupGuide(1)">Altre modalità</button>`);
   $("guideProfile").onclick=()=>openProfile(true);
-  $("guideCopy").onclick=()=>{if(!p.goal){alert('Completa prima il profilo.');return;}copyProfilePrompt();};
+  $("guideCopy").onclick=()=>{if(!p.goal){alert('Completa prima il profilo.');return;}copyProfilePrompt('json');};
+  $("guideCopyText").onclick=()=>{if(!p.goal){alert('Completa prima il profilo.');return;}copyProfilePrompt('text');};
   $("guideChatGPT").onclick=()=>window.open("https://chatgpt.com/","_blank","noopener,noreferrer");
   $("guideStep3").onclick=()=>openSetupGuide(3);
   return;
  }
- openSheet(`<h2>Importa la scheda JSON</h2><div class="sub">Incolla il JSON o carica il file. Ti mostreremo un'anteprima prima di sostituire il programma.</div><button class="big-btn primary" id="guidePaste">Incolla JSON</button><button class="big-btn" id="guideFile">Scegli file JSON</button><button class="big-btn" onclick="openSetupGuide(1)">Indietro</button>`);
+ openSheet(`<h2>Importa la tua scheda</h2><div class="sub">Incolla JSON oppure testo guidato, anche con i titoli che ChatGPT può aggiungere. Visualizzerai sempre un'anteprima prima della conferma.</div><button class="big-btn primary" id="guidePaste">Incolla scheda / JSON</button><button class="big-btn" id="guideFile">Scegli file JSON</button><button class="big-btn" onclick="openSetupGuide(1)">Indietro</button>`);
  $("guidePaste").onclick=openPasteProgram;$("guideFile").onclick=selectProgramFile;
 }
-function copyProfilePrompt(){
+const COACH_TEXT_PROMPT = `Agisci come preparatore atletico basato sulle evidenze. Genera una scheda PERSONALIZZATA usando il profilo qui sotto. Restituisci SOLO il seguente FORMATO TESTUALE GUIDATO, senza spiegazioni extra né blocchi markdown. Inizia ogni giorno con un'intestazione # Nome del giorno e poi scrivi UNA riga per esercizio usando i quattro campi separati da |. Esempio:
+# Lunedì - Pull
+Lat machine presa neutra | 3x8-12 | 180 | Dorso
+Rematore con supporto al petto | 3x10 | 180 | Dorso
+# Giovedì - Gambe
+Leg curl seduto | 3x10-15 | 180 | Femorali
+Usa ESATTAMENTE questi nomi per muscle: Petto, Dorso, Spalle, Bicipiti, Tricipiti, Quadricipiti, Femorali, Glutei, Adduttori, Polpacci, Core, Collo, Altro. La terza colonna e' il recupero in secondi (15-600). La seconda e' serie x ripetizioni, per esempio 3x8-12. Se i giorni sono flessibili usa intestazioni # Giorno A, # Giorno B ecc., in numero uguale a sessionsPerWeek. Se sono fissi rispetta i giorni trainingWeekdays. Non inserire tabelle markdown, trattini prima degli esercizi, elenchi numerati, commenti né testo prima o dopo: proGYM deve poter interpretare direttamente ogni riga. Considera obiettivo, esperienza, priorita, tempo disponibile, attrezzature, recuperi e preferenze. Se sono presenti limitazioni, non formulare diagnosi o promesse di sicurezza.
+
+PROFILO E PREFERENZE:
+`;
+function copyProfilePrompt(format='json'){
  const p=getProfile();const {birthDate,nickname,age:oldAge,...safeProfile}=p;
  // Informazioni facoltative potenzialmente sensibili non vengono trasmesse automaticamente.
  const {limitations,...profileWithoutHealth}=safeProfile;
- const txt=COACH_PROMPT+JSON.stringify({...profileWithoutHealth,age:ageFromDOB(birthDate)??(oldAge||null),limitations:"Non condivise automaticamente. L'utente può aggiungerle nel prompt se desidera."},null,2);
+ const txt=(format==='text'?COACH_TEXT_PROMPT:COACH_PROMPT)+JSON.stringify({...profileWithoutHealth,age:ageFromDOB(birthDate)??(oldAge||null),limitations:"Non condivise automaticamente. L'utente può aggiungerle nel prompt se desidera."},null,2);
  if(navigator.clipboard && navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(()=>showToast("Prompt copiato")).catch(()=>showPromptText(txt));}
  else showPromptText(txt);
 }
@@ -1312,7 +1324,7 @@ function selectProgramFile(){
  const inp=document.createElement("input");inp.type="file";inp.accept=".json,application/json";
  inp.onchange=async()=>{try{const f=inp.files?.[0];if(!f)return;if(f.size>1024*1024)throw Error("File troppo grande (limite 1 MB).");await importProgramText(await f.text());}catch(e){alert("Importazione non riuscita: "+e.message);}};inp.click();
 }
-function openPasteProgram(){openSheet(`<h2>Incolla JSON della scheda</h2><div class="sub">Incolla il JSON completo, senza altri testi.</div><textarea id="programJson" rows="10" style="width:100%;padding:12px;background:var(--surface-2);color:var(--text);border:1px solid var(--line);border-radius:10px;font:12px monospace"></textarea><button class="big-btn primary" id="confirmPaste">Verifica e visualizza anteprima</button><button class="big-btn" onclick="openSetupGuide(3)">Indietro</button>`);$("confirmPaste").onclick=()=>importProgramText($("programJson").value);}
+function openPasteProgram(){openSheet(`<h2>Importa scheda da ChatGPT o coach</h2><div class="sub">Incolla qui la risposta. Accetto JSON puro, JSON con titoli o blocchi <b>blocco JSON di ChatGPT</b>, oppure una scheda nel formato testuale guidato <b># Giorno</b> e <b>Esercizio | 3x8-12 | 180 | Dorso</b>. L'importazione avviene solo dopo la tua conferma.</div><textarea id="programJson" rows="12" style="width:100%;padding:12px;background:var(--surface-2);color:var(--text);border:1px solid var(--line);border-radius:10px;font:12px monospace" placeholder='Incolla la scheda JSON oppure il testo guidato...'></textarea><button class="big-btn primary" id="confirmPaste">Analizza e mostra anteprima</button><button class="big-btn" onclick="openSetupGuide(3)">Indietro</button>`);$("confirmPaste").onclick=()=>importProgramText($("programJson").value);}
 document.querySelectorAll("[data-nav]").forEach(b=>b.onclick=()=>{
  const name=b.dataset.nav;setActiveNav(name);
  if(name==="workout"){closeSheet();window.scrollTo({top:0,behavior:"smooth"});}
@@ -1337,9 +1349,9 @@ const EXERCISE_MUSCLES = [
 ];
 function recognizeMuscle(name){return EXERCISE_MUSCLES.find(([re])=>re.test(name))?.[1]||null;}
 const COACH_PROMPT = `Agisci come un preparatore atletico basato sulle evidenze. Crea una scheda personalizzata in base al profilo che ti fornirò. Non formulare diagnosi e non dichiarare sicuri esercizi per eventuali infortuni.
-Restituisci SOLO un oggetto JSON valido, senza markdown o testo aggiuntivo, con questa struttura:
+Restituisci SOLO un oggetto JSON valido, SENZA blocchi markdown, SENZA recinzioni markdown di codice, SENZA introduzioni, SENZA commenti, SENZA testo prima o dopo. Il risultato deve iniziare con { e terminare con }. Questo oggetto servirà per importare la scheda direttamente nell'app proGYM. Puoi inserire spiegazioni tecniche concise solo nei campi note e notes. Usa esattamente questa struttura:
 {"schemaVersion":"1.0","program":{"name":"Nome programma","days":[{"name":"Lunedì - Pull","tab":"Lun","weekday":1,"sub":"Focus dorsali","note":"Indicazioni facoltative","exercises":[{"name":"Lat machine presa neutra","sets":3,"reps":{"min":8,"max":12},"rir":2,"restSeconds":180,"weightUnit":"kg","muscle":"Dorso","notes":"Consigli tecnici sintetici","variants":["Lat machine convergente"]}]}]}}
-Usa solo questi valori per muscle: Petto, Dorso, Spalle, Bicipiti, Tricipiti, Quadricipiti, Femorali, Glutei, Adduttori, Polpacci, Core, Collo, Altro. Se scheduleMode è "flexible", genera esattamente sessionsPerWeek giornate ordinate (A, B, C...) e usa weekday:null: l’atleta sceglierà quando allenarsi, senza giorni fissi. Se è "fixed", ogni giornata deve avere weekday: 1=lunedì, 2=martedì, 3=mercoledì, 4=giovedì, 5=venerdì, 6=sabato, 7=domenica, rispettando esattamente i giorni selezionati nel profilo. Da 1 a 7 giornate e da 1 a 25 esercizi/giorno, serie 1–10, recupero 15–600 secondi. Evita esercizi contro le limitazioni che descriverò, segnala la necessità di valutazione sanitaria se pertinente e non inventare dati. Non includere nome, data di nascita o dati sanitari nel JSON della scheda. Le limitazioni servono soltanto per scegliere esercizi appropriati: se ci sono segnala che serve parere professionale, non formulare diagnosi. Considera anche il campo goalDetails, la durata massima, attrezzatura e preferenze. Imposta restSeconds e weightUnit ("kg" oppure "lb") per ogni esercizio; se restMode è global, usa defaultRestSeconds come preferenza di partenza, salvo giustificazioni tecniche.
+Usa solo questi valori per muscle: Petto, Dorso, Spalle, Bicipiti, Tricipiti, Quadricipiti, Femorali, Glutei, Adduttori, Polpacci, Core, Collo, Altro. Se scheduleMode è "flexible", genera esattamente sessionsPerWeek giornate ordinate (A, B, C...) e usa weekday:null: l’atleta sceglierà quando allenarsi, senza giorni fissi. Se è "fixed", ogni giornata deve avere weekday: 1=lunedì, 2=martedì, 3=mercoledì, 4=giovedì, 5=venerdì, 6=sabato, 7=domenica, rispettando esattamente i giorni selezionati nel profilo. Da 1 a 7 giornate e da 1 a 25 esercizi/giorno, serie 1–10, recupero 15–600 secondi. Evita esercizi contro le limitazioni che descriverò, segnala la necessità di valutazione sanitaria se pertinente e non inventare dati. Non includere nome, data di nascita o dati sanitari nel JSON della scheda. Le limitazioni servono soltanto per scegliere esercizi appropriati: se ci sono segnala che serve parere professionale, non formulare diagnosi. Considera anche il campo goalDetails, la durata massima, attrezzatura e preferenze. Genera un JSON completo, non troncato e non un esempio parziale. Ogni esercizio deve avere tutti i campi richiesti e reps come oggetto {"min":numero,"max":numero}. Non inserire virgole finali e non aggiungere testo descrittivo fuori dal JSON. Imposta restSeconds e weightUnit ("kg" oppure "lb") per ogni esercizio; se restMode è global, usa defaultRestSeconds come preferenza di partenza, salvo giustificazioni tecniche.
 
 PROFILO E PREFERENZE DA CONSIDERARE (scrivo qui sotto):
 `;
@@ -1490,30 +1502,34 @@ function renderManualBuilder(){
  $('mbClose').onclick=()=>{captureManual();closeSheet();showToast('Bozza salvata');};
  $('mbReview').onclick=()=>{captureManual();try{const obj={schemaVersion:'1.0',program:{name:manualDraft.name||'La mia scheda',manualEdit:true,days:manualDraft.days.map(d=>({id:d.id,name:d.name,weekday:d.weekday,exercises:d.exercises}))}};validateProgram(obj,true);importProgramText(JSON.stringify(obj),()=>localStorage.removeItem(MANUAL_DRAFT_KEY));}catch(err){alert('Controlla la scheda: '+err.message);}};
 }
-function openTextProgram(){
- openSheet(`<h2>Incolla la scheda come testo</h2><div class="sub">Una riga per esercizio. Formato: <b>Nome esercizio | serie x ripetizioni | recupero in secondi | gruppo muscolare</b>.<p>Per separare i giorni scrivi una riga come <b># Lunedì - Pull</b>.</p></div>
- <textarea id="rawWorkoutText" rows="12" style="width:100%;padding:12px;background:var(--surface-2);color:var(--text);border:1px solid var(--line);border-radius:10px" placeholder="# Lunedì - Pull&#10;Lat machine | 3x8-12 | 180 | Dorso&#10;Rematore | 3x10 | 150 | Dorso&#10;# Giovedì - Gambe&#10;Leg press | 3x10-12 | 180 | Quadricipiti"></textarea>
- <p class="warn">Il riconoscimento è basato su un formato guidato, non sull'AI. Controlla sempre l'anteprima.</p>
- <button class="big-btn primary" id="parseWorkoutText">Controlla la scheda</button><button class="big-btn" onclick="openSetupGuide(1)">Indietro</button>`);
- $('parseWorkoutText').onclick=()=>{try{
-  const lines=$('rawWorkoutText').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
-  if(!lines.length)throw Error('Incolla almeno un esercizio.');
-  const days=[];let current=null;
-  for(const [i,line] of lines.entries()){
-   if(line.startsWith('#')){
-    const title=line.replace(/^#+\s*/,'').trim();if(!title)throw Error('Intestazione del giorno vuota.');
-    const wd=WEEKDAYS.findIndex(x=>x&&new RegExp(x,'i').test(title));
-    current={name:title,weekday:wd>0?wd:null,exercises:[]};days.push(current);continue;
-   }
-   if(!current){const first=Number(getProfile().trainingWeekdays?.[0])||1;current=blankManualDay(first);days.push(current);}
-   const x=line.split('|').map(v=>v.trim());if(x.length<2||x.length>4)throw Error('Riga '+(i+1)+': usa Nome | 3x8-12 | 180 | Dorso');
-   const match=x[1].match(/^(\d+)\s*[x×]\s*(\d+)(?:\s*[-–]\s*(\d+))?$/i);if(!match)throw Error('Riga '+(i+1)+': formato serie/ripetizioni non valido.');
-   let muscle=x[3]||recognizeMuscle(x[0])||'Altro';muscle=MUSCLE_OPTIONS.find(m=>m.toLowerCase()===muscle.toLowerCase())||'Altro';
-   current.exercises.push({name:x[0],sets:Number(match[1]),reps:match[3]?match[2]+'-'+match[3]:match[2],restSeconds:Number(x[2]||getProfile().defaultRestSeconds||180),muscle});
+function parseGuidedWorkoutText(raw){
+ const lines=String(raw||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+ if(!lines.length)throw Error('Incolla almeno un esercizio.');
+ const days=[];let current=null;
+ for(const [i,line] of lines.entries()){
+  if(/^```/.test(line)||/^(?:scheda|programma)\s*:/i.test(line))continue;
+  if(line.startsWith('#')){
+   const title=line.replace(/^#+\s*/,'').trim();if(!title)throw Error('Intestazione della giornata vuota.');
+   const wd=WEEKDAYS.findIndex(x=>x&&new RegExp(x,'i').test(title));
+   current={name:title,weekday:wd>0?wd:null,exercises:[]};days.push(current);continue;
   }
-  const p=getProfile();const avail=p.trainingWeekdays||[];const used=new Set();for(const d of days){if(p.scheduleMode==="flexible"){d.weekday=null;continue;}if(!d.weekday||used.has(d.weekday)){d.weekday=[...avail,1,2,3,4,5,6,7].find(n=>!used.has(Number(n)))||1;}used.add(d.weekday);}
-  importProgramText(JSON.stringify({schemaVersion:'1.0',program:{name:'Scheda da testo',days}}));
- }catch(e){alert('Impossibile interpretare il testo: '+e.message);}};
+  if(!line.includes('|'))throw Error('Riga '+(i+1)+' non riconosciuta. Usa: Nome | 3x8-12 | 180 | Dorso');
+  if(!current){const first=Number(getProfile().trainingWeekdays?.[0])||1;current=blankManualDay(first);days.push(current);}
+  const x=line.split('|').map(v=>v.trim());if(x.length<2||x.length>4)throw Error('Riga '+(i+1)+': usa Nome | 3x8-12 | 180 | Dorso');
+  const match=x[1].match(/^(\d+)\s*[x×]\s*(\d+)(?:\s*[-–]\s*(\d+))?$/i);if(!match)throw Error('Riga '+(i+1)+': formato serie/ripetizioni non valido.');
+  let muscle=x[3]||recognizeMuscle(x[0])||'Altro';muscle=MUSCLE_OPTIONS.find(m=>m.toLowerCase()===muscle.toLowerCase())||'Altro';
+  current.exercises.push({name:x[0],sets:Number(match[1]),reps:match[3]?match[2]+'-'+match[3]:match[2],restSeconds:Number(x[2]||getProfile().defaultRestSeconds||180),muscle});
+ }
+ const p=getProfile();const avail=p.trainingWeekdays||[];const used=new Set();
+ for(const d of days){if(p.scheduleMode==='flexible'){d.weekday=null;continue;}if(!d.weekday||used.has(d.weekday)){d.weekday=[...avail,1,2,3,4,5,6,7].find(n=>!used.has(Number(n)))||1;}used.add(d.weekday);}
+ return {schemaVersion:'1.0',program:{name:'Scheda da testo',days}};
+}
+function openTextProgram(){
+ openSheet(`<h2>Incolla la scheda come testo</h2><div class="sub">Una riga per esercizio: <b>Nome | 3x8-12 | 180 | Dorso</b>. Separa le giornate con <b># Lunedì - Pull</b>. Puoi anche usare l'importazione universale per incollare un JSON.</div>
+ <textarea id="rawWorkoutText" rows="12" style="width:100%;padding:12px;background:var(--surface-2);color:var(--text);border:1px solid var(--line);border-radius:10px" placeholder="# Lunedì - Pull&#10;Lat machine | 3x8-12 | 180 | Dorso&#10;Rematore | 3x10 | 150 | Dorso&#10;# Giovedì - Gambe&#10;Leg press | 3x10-12 | 180 | Quadricipiti"></textarea>
+ <p class="warn">Il testo libero senza separatori non è interpretato automaticamente; verifica sempre l'anteprima.</p>
+ <button class="big-btn primary" id="parseWorkoutText">Controlla la scheda</button><button class="big-btn" onclick="openSetupGuide(1)">Indietro</button>`);
+ $('parseWorkoutText').onclick=()=>{try{importProgramText(JSON.stringify(parseGuidedWorkoutText($('rawWorkoutText').value)));}catch(e){alert('Impossibile interpretare il testo: '+e.message);}};
 }
 function openDocumentReference(){
  openSheet(`<h2>Hai una foto o un PDF?</h2><div class="sub">Puoi aprire la foto o il PDF come riferimento e trascrivere la scheda direttamente nell'app. <b>Il riconoscimento automatico dei documenti non è ancora disponibile</b>: non carichiamo i tuoi file su server esterni.</div>
@@ -1551,9 +1567,10 @@ function openProgramManager(){
     <button class="big-btn" id="textProgram">Incolla esercizi come testo</button>
     <button class="big-btn" id="imageProgram">Usa foto o PDF come riferimento</button>
     <button class="big-btn" id="importProgram">Importa JSON da file</button>
-    <button class="big-btn" id="pasteProgram">Incolla JSON</button>
+    <button class="big-btn" id="pasteProgram">Incolla scheda / JSON</button>
     <button class="big-btn" id="exportProgram">Esporta scheda JSON</button>
-    <button class="big-btn" id="copyPrompt">Copia prompt per ChatGPT / Gemini / coach</button>
+    <button class="big-btn" id="copyPrompt">Copia prompt JSON per ChatGPT / Gemini</button>
+    <button class="big-btn" id="copyPromptText">Copia prompt scheda testuale</button>
     <button class="big-btn" id="resetProgram">Rimuovi la scheda attiva</button>
     <p class="warn">L'importazione sostituisce la scheda visualizzata, non cancella i precedenti allenamenti. Esegui comunque un backup prima di modifiche importanti. Le sostituzioni di esercizio fatte durante l'allenamento valgono solo per quella data.</p>
     <button class="big-btn" onclick="closeSheet()">Chiudi</button>`);
@@ -1565,12 +1582,42 @@ function openProgramManager(){
   $("importProgram").onclick=selectProgramFile;
   $("pasteProgram").onclick=openPasteProgram;
   $("exportProgram").onclick=()=>{if(!PROGRAM.length){alert("Prima crea o importa una scheda.");return;}downloadJson({schemaVersion:"1.0",program:{name:programName(),days:PROGRAM.map(d=>({name:d.title,tab:d.tab,weekday:d.weekday,sub:d.sub,note:d.note,exercises:d.ex.map(e=>({name:e.name,sets:e.sets,reps:e.reps,rir:e.rir??2,restSeconds:e.rest,muscle:e.muscle,notes:e.tip,weightUnit:weightUnit(e),variants:e.variants||[],bw:!!e.bw}))}))}},"scheda-personale.json");};
-  $("copyPrompt").onclick=copyProfilePrompt;
+  $("copyPrompt").onclick=()=>copyProfilePrompt('json');
+  $("copyPromptText").onclick=()=>copyProfilePrompt('text');
   $("resetProgram").onclick=()=>{if(!confirm("Rimuovere la scheda attiva? Lo storico degli allenamenti non verrà cancellato."))return;snapshotActive("Scheda rimossa");localStorage.removeItem(ACTIVE_VERSION_KEY);PROGRAM=[];window.ACTIVE_PROGRAM_NAME="";localStorage.removeItem(PKEY);rebuildMuscles();state.dayId=null;closeSheet();renderDays();renderList();renderWelcome();};
+}
+// Cerca un oggetto JSON completo rispettando parentesi nei testi e stringhe escape.
+// Se ChatGPT aggiunge un'introduzione o un blocco markdown, recupera il solo oggetto.
+function extractProgramObject(input){
+ const raw=String(input||'').replace(/^\uFEFF/,'').trim();
+ if(!raw)throw Error('Non hai incollato alcuna scheda.');
+ try{return JSON.parse(raw);}catch(_){/* prova a isolare il JSON */}
+ for(let start=raw.indexOf('{');start>=0;start=raw.indexOf('{',start+1)){
+  let depth=0,inString=false,escaped=false;
+  for(let i=start;i<raw.length;i++){
+   const ch=raw[i];
+   if(inString){if(escaped){escaped=false;continue;}if(ch==='\\'){escaped=true;continue;}if(ch==='"')inString=false;continue;}
+   if(ch==='"'){inString=true;continue;}
+   if(ch==='{')depth++;
+   if(ch==='}'){
+    depth--;
+    if(depth===0){try{const item=JSON.parse(raw.slice(start,i+1));if(item&&typeof item==='object'&&(item.program||item.days))return item;}catch(_){}break;}
+   }
+  }
+ }
+ throw Error('Non ho trovato un JSON completo e leggibile. Chiedi a ChatGPT: «Restituisci nuovamente soltanto il JSON completo, senza testo aggiuntivo».');
+}
+function readProgramInput(txt){
+ const raw=String(txt||'').trim();
+ if(!raw)throw Error('Incolla la scheda prima di continuare.');
+ try{return extractProgramObject(raw);}catch(err){
+  if(/^\s*#\s*.+/m.test(raw)&&/^.+\|\s*\d+\s*[x×]\s*\d+/m.test(raw))return parseGuidedWorkoutText(raw);
+  throw err;
+ }
 }
 async function importProgramText(txt, onSuccess){
   try{
-    const obj=JSON.parse(txt.replace(/^\uFEFF/,""));
+    const obj=readProgramInput(txt);
     const checkedDays=validateProgram(obj,true);
     const p=getProfile();
     const declared=Array.isArray(p.trainingWeekdays)?p.trainingWeekdays.map(Number):null;
@@ -1585,7 +1632,7 @@ async function importProgramText(txt, onSuccess){
     const blocks=checkedDays.map(d=>`<div class="preview-day"><b>${safe(dayNames[d.weekday]||d.title)} · ${safe(d.title)}</b><small>${d.ex.length} esercizi · ${d.ex.reduce((n,e)=>n+e.sets,0)} serie</small><small>${d.ex.map(e=>`${safe(e.name)} (${e.sets}×${safe(e.reps)}, ${fmt(e.rest)}, ${weightUnit(e)})`).join(" · ")}</small></div>`).join("");
     openSheet(`<h2>Anteprima della scheda</h2><div class="sub">${safe(name)} · ${checkedDays.length} giorni · ${total} esercizi. Controlla tutto prima di confermare.</div>${blocks}<p class="warn">L'importazione sostituirà la scheda attiva. Il vecchio storico non sarà cancellato, ma i nuovi esercizi avranno ID separati.</p><button class="big-btn primary" id="approveProgram">Conferma e importa</button><button class="big-btn" onclick="openSetupGuide(3)">Annulla</button>`);
     $("approveProgram").onclick=()=>{try{setProgram(obj);if(typeof onSuccess==="function")onSuccess();closeSheet();renderWelcome();showToast("Scheda importata correttamente");setActiveNav("workout");}catch(err){alert("Importazione non riuscita: "+err.message);}};
-  }catch(e){alert("JSON non valido: "+e.message);}
+  }catch(e){alert("Impossibile importare la scheda: "+e.message+"\n\nPuoi incollare un JSON o usare il formato testuale guidato.");}
 }
 $("btnProfile").onclick=openProfile;
 $("btnProgram").onclick=openProgramManager;

@@ -1,7 +1,12 @@
-# proGYM 3.0 — Fondamenta dello storico
+# proGYM 3.0.1 — Importazione affidabile
 
-Nuove funzioni: salta temporaneamente un esercizio per la singola data; ripristinalo senza modificare la scheda; progressi e volume settimanale escludono le serie saltate; archivio versioni delle schede accessibile da Scheda → Archivio versioni schede, con consultazione e clonazione/riattivazione. Identità biomeccaniche conservative e confronti legati agli identificativi esistenti.
+Aggiornamento di proGYM 3.0.
 
-IMPORTANTE: prima di pubblicare o importare schede esporta un backup completo (Impostazioni → Salva backup dati). I backup 3.0 includono anche l'archivio e le associazioni delle versioni alle sedute. Le vecchie sedute sono preservate e non viene inserita alcuna scheda personale nei file pubblici.
+- Prompt più rigoroso: JSON completo e importabile, senza testo esterno.
+- Incolla universale: JSON puro, JSON preceduto/seguito da testo, blocchi markdown e scheda testuale guidata.
+- Anteprima e conferma prima di sostituire la scheda.
+- Messaggi di errore più espliciti.
+- Nessuna scheda personale nel codice pubblico.
+- Nessuna cancellazione volontaria di storico o profilo.
 
-Prova per una settimana prima di migrare dati ad altre applicazioni. Non caricare su GitHub backup personali. Timer a schermo bloccato non è nativo in questa release.
+**Attenzione**: esportare il backup completo prima dell’aggiornamento. Il parser del testo guidato non interpreta automaticamente ogni risposta libera.
