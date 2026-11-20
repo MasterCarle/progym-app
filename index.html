@@ -165,7 +165,7 @@ header{
 .set-row.pr .fld input{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
 .pr-star{position:absolute;top:-6px;left:-4px;font-size:.75rem}
 .last{font-size:.68rem;color:var(--muted);padding:0 4px 8px;text-align:center;grid-column:1/-1}
-.set-actions{display:flex;gap:8px;padding:4px 4px 6px}
+.set-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;padding:4px 4px 6px}.set-actions .mini{min-width:0;min-height:44px;height:auto;padding:6px 3px;white-space:normal;overflow-wrap:anywhere}.analytics-status{margin:8px 0}.analytics-status .big-btn{margin:5px 0}
 .mini{
   flex:1;height:38px;border-radius:10px;background:var(--surface-2);border:1px solid var(--line);
   font-size:.78rem;color:var(--muted);font-weight:600;
@@ -387,7 +387,7 @@ const Store = (() => {
 /* =========================================================
    3. STATO
    ========================================================= */
-const todayISO = () => new Date().toISOString().slice(0,10);
+const todayISO = () => {const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;};
 let state = { dayId: guessDay(), date: todayISO() };
 function safe(text){ return String(text ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function safeAttr(text){ return safe(text); }
@@ -482,12 +482,39 @@ function exerciseDoneForDate(d){
   if(!d||!d.ex?.length)return false;
   return d.ex.every(ex=>{const entry=exEntry(ex);return entry && (entry.skipped===true || (entry.sets.length && entry.sets.every(x=>x.d)));});
 }
-function showSessionComplete(){
-  const skipped=day().ex.filter(ex=>exEntry(ex)?.skipped);
-  const done=day().ex.reduce((n,ex)=>n+(exEntry(ex)?.skipped?0:(exEntry(ex)?.sets||[]).filter(x=>x.d).length),0);
-  openSheet(`<h2>Allenamento terminato!</h2><p>Hai completato <b>${done} serie</b> in <b>${safe(day().title)}</b> del ${safe(dmy(state.date))}.</p>${skipped.length?`<p class="warn">Esercizi saltati oggi (${skipped.length}): ${skipped.map(x=>safe(x.name)).join(", ")}. Non sono conteggiati nel volume effettivo.</p>`:""}<p class="sub">Non serve un altro recupero: la seduta è terminata.</p><button class="big-btn primary" id="closeFinishedSession">Termina e torna alla scheda</button>`);
-  $("closeFinishedSession").onclick=()=>{closeSheet();showToast("Seduta completata con successo!");};
+const WORKOUT_META_KEY="progym_workout_meta_v31";
+function workoutMeta(){return readJSON(WORKOUT_META_KEY,{});}
+function startWorkout(explicit=false){
+ if(!day()||state.date!==todayISO())return;
+ const m=workoutMeta(),k=sessionKey();
+ if(m[k]?.startedAt)return;
+ m[k]={startedAt:Date.now(),explicit,version:currentVersion(),title:day().title};writeJSON(WORKOUT_META_KEY,m);
 }
+function reopenWorkout(){const m=workoutMeta(),k=sessionKey();if(m[k]?.finishedAt){delete m[k].finishedAt;writeJSON(WORKOUT_META_KEY,m);}}
+function finishWorkout(){const m=workoutMeta(),k=sessionKey();if(!m[k])m[k]={version:currentVersion(),title:day().title};if(!m[k].finishedAt)m[k].finishedAt=Date.now();writeJSON(WORKOUT_META_KEY,m);}
+function durationText(m){if(!m?.startedAt||!m?.finishedAt||m.finishedAt<m.startedAt)return "Non registrata";const mins=Math.floor((m.finishedAt-m.startedAt)/60000);return `${Math.floor(mins/60)} h ${mins%60} min${m.explicit?"":" (dal primo intervento)"}`;}
+function statsFor(raw){const sets=(Array.isArray(raw)?raw:raw?.sets||[]).filter(x=>x.d);const valid=sets.filter(x=>x.r!==""&&x.r!=null&&Number.isFinite(Number(x.r))&&Number(x.r)>=0);const weighted=valid.filter(x=>x.w!==""&&x.w!=null&&Number.isFinite(Number(x.w))&&Number(x.w)>=0);return {sets:sets.length,reps:valid.reduce((a,x)=>a+Number(x.r),0),volume:weighted.reduce((a,x)=>a+Number(x.r)*Number(x.w),0),weighted:weighted.length};}
+function sessionReport(){
+ const d=day(), current=session(), k=sessionKey();
+ const entries=d.ex.map(ex=>({ex,raw:exEntry(ex),variant:exEntry(ex)?.variant||ex.name}));
+ const sum=items=>items.reduce((a,b)=>({sets:a.sets+b.sets,reps:a.reps+b.reps,volume:a.volume+b.volume,weighted:a.weighted+b.weighted}),{sets:0,reps:0,volume:0,weighted:0});
+ const actual=sum(entries.map(e=>statsFor(e.raw)));
+ const planned=d.ex.reduce((a,e)=>a+e.sets,0);
+ const skipped=entries.filter(e=>e.raw?.skipped).length;
+ const performed=entries.filter(e=>statsFor(e.raw).sets>0);
+ const candidates=new Map();
+ performed.forEach(e=>historyRecords(e.ex,e.variant).forEach(r=>{if(!statsFor(r.raw).sets)return;const group=candidates.get(r.k)||new Map();if(!group.has(e.ex.id))group.set(e.ex.id,r);candidates.set(r.k,group);}));
+ // Prefer same day ID; across revisions require at least two matches and majority of performed exercises.
+ const eligible=[...candidates.entries()].filter(([key,g])=>key.endsWith("__"+d.id)||(g.size>=2&&g.size>performed.length/2)).sort((a,b)=>b[0].localeCompare(a[0]));
+ const previous=eligible[0];let comparison="<p class='sub'>Nessuna seduta equivalente identificabile con sufficiente certezza.</p>";
+ if(previous){const [pk,matches]=previous;const used=new Set();const pairs=performed.filter(e=>{const r=matches.get(e.ex.id);if(!r||used.has(r.sourceId))return false;used.add(r.sourceId);return true;});
+ const now=sum(pairs.map(e=>statsFor(e.raw))),old=sum(pairs.map(e=>statsFor(matches.get(e.ex.id).raw)));
+ const delta=(a,b)=>`${a-b>=0?"+":""}${Math.round((a-b)*100)/100}`;
+ const n=v=>v.toLocaleString("it-IT",{maximumFractionDigits:1});
+ comparison=`<h3>Confronto · ${safe(pk.slice(0,10))}</h3><p class="sub">${pairs.length} esercizi confrontabili su ${performed.length} eseguiti oggi. Confronto a parità di identità storica, non dell'intera scheda.</p><div class="preview-day"><b>Serie ${old.sets} → ${now.sets} (${delta(now.sets,old.sets)})</b><small>Ripetizioni ${old.reps} → ${now.reps} (${delta(now.reps,old.reps)})</small><small>Volume-carico esterno registrato ${n(old.volume)} → ${n(now.volume)} kg·rip. (${delta(now.volume,old.volume)})${old.volume>0?` · ${delta(now.volume/old.volume*100,100)}%`:""}</small></div>`+pairs.map(e=>{const x=statsFor(e.raw),y=statsFor(matches.get(e.ex.id).raw);return `<div class="preview-day"><b>${safe(e.variant)}</b><small>Serie ${y.sets} → ${x.sets} · Rip. ${y.reps} → ${x.reps}</small><small>Volume esterno ${n(y.volume)} → ${n(x.volume)} kg·rip.</small></div>`;}).join("");}
+ return `<h2>Riepilogo allenamento</h2><p><b>${safe(d.title)}</b> · ${safe(state.date)}</p><div class="preview-day"><b>Durata: ${safe(durationText(workoutMeta()[k]))}</b><small>Serie eseguite ${actual.sets} / ${planned} programmate · Esercizi saltati ${skipped}</small><small>Ripetizioni registrate ${actual.reps} · Volume-carico esterno ${actual.volume.toLocaleString("it-IT",{maximumFractionDigits:1})} kg·rip.</small></div>${comparison}<p class="sub">Il volume usa i carichi inseriti in kg, non stima il peso corporeo, la resistenza reale delle macchine o il lavoro muscolare. Serie già eseguite prima di uno skip restano conteggiate. Durata inclusiva delle pause; nessuna stima per vecchie sedute.</p>`;
+}
+function showSessionComplete(){finishWorkout();openSheet(`<h2>Allenamento terminato!</h2>${sessionReport()}<button class="big-btn primary" id="closeFinishedSession">Termina e torna alla scheda</button>`);$("closeFinishedSession").onclick=()=>{closeSheet();showToast("Seduta completata con successo!");};}
 const MUSCLE_OPTIONS = ["Petto","Dorso","Spalle","Bicipiti","Tricipiti","Quadricipiti","Femorali","Glutei","Adduttori","Polpacci","Core","Collo","Altro"];
 function validateProgram(obj, rejectEmpty){
   const root = obj && (obj.program || obj);
@@ -687,18 +714,18 @@ function suggestion(ex,variant){
   if(ex.unit==="sec")return null;
   const last=lastPerformance(ex,variant);
   if(!last)return "Registra una seduta completa per ricevere un consiglio basato sui tuoi dati.";
-  const completed=last.sets.filter(s=>s.d && s.r!=="" && Number.isFinite(Number(s.r)));
+  const completed=last.sets.filter(s=>s.d && s.r!=="" && s.r!=null && Number.isFinite(Number(s.r)));
   if(!completed.length)return "Mancano ripetizioni registrate nella seduta precedente: completa il diario per avere consigli.";
   const [min,max]=parseRepRange(ex.reps);
   const reps=completed.map(s=>Number(s.r));
-  const weightValues=completed.map(s=>s.w===""?null:Number(s.w));
+  const weightValues=completed.map(s=>s.w===""||s.w==null?null:Number(s.w));
   const hasWeights=weightValues.every(v=>v!==null && Number.isFinite(v));
   const sameLoad=hasWeights && weightValues.every(v=>v===weightValues[0]);
   const total=reps.reduce((a,b)=>a+b,0);
   const commonLoad=sameLoad ? weightValues[0] : null;
   const loadText=ex.bw?(commonLoad>0?`+${weightText(commonLoad,ex)} di zavorra`:`il corpo libero`):commonLoad!==null?`${weightText(commonLoad,ex)}`:`il carico precedente`;
   if(completed.length!==ex.sets)return `Hai registrato ${completed.length} serie su ${ex.sets} previste. <b>Ripeti il carico e completa il programma</b> prima di aumentarlo.`;
-  if(!sameLoad && !ex.bw)return `L'ultima seduta contiene carichi diversi o mancanti: <b>consolida le serie</b> e confronta tecnica e ripetizioni; nessun aumento automatico.`;
+  if(!sameLoad)return `L'ultima seduta contiene carichi diversi o mancanti: <b>consolida le serie</b> e confronta tecnica e ripetizioni; nessun aumento automatico.`;
   if(reps.some(n=>n<min))return `Ultima seduta: ${reps.join(" / ")} rip. (totale ${total}), almeno una serie sotto ${min}. <b>Consolida ${loadText}</b> o riducilo se la tecnica peggiora.`;
   if(reps.every(n=>n>=max))return `Ultima seduta: ${reps.join(" / ")} rip. (totale ${total}). <b>Valuta un piccolo incremento di carico</b> solo se tutte le serie erano controllate e con margine sufficiente.`;
   const target=[...reps];
@@ -734,6 +761,10 @@ function renderList(){
   const recommended=isFlexibleSchedule()?nextFlexibleWorkout():null;
   $("dayNote").innerHTML = (isFlexibleSchedule()?`<div class="flexible-hint"><b>Giorni flessibili:</b> oggi puoi svolgere qualunque giornata della scheda. Selezionala dalle schede in alto; ${recommended?`prossima seduta suggerita: <b>${safe(recommended.title)}</b>`:"scegli la tua prima seduta"}. Non è un obbligo: rispetta il recupero tra le sedute.</div>`:"")+(d.note ? `<div class="note-day">${safe(d.note)}</div>` : "");
 
+  const meta=workoutMeta()[sessionKey()];
+  $("dayNote").innerHTML+=`<div class="analytics-status">${exerciseDoneForDate(d)?'<button class="big-btn" id="workoutReport">Riepilogo seduta</button>':state.date===todayISO()?meta?.startedAt?'<div class="sub">Seduta avviata · Durata in registrazione</div>':'<button class="big-btn primary" id="workoutStart">Avvia allenamento</button>':''}</div>`;
+  if($("workoutStart"))$("workoutStart").onclick=()=>{startWorkout(true);renderList();};
+  if($("workoutReport"))$("workoutReport").onclick=()=>{openSheet(sessionReport()+'<button class="big-btn" onclick="closeSheet()">Chiudi</button>');};
   $("list").innerHTML = d.ex.map(ex => {
     const entry = exEntry(ex);
     const rows = entry ? entry.sets : Array.from({length:ex.sets},()=>({w:"",r:"",d:false}));
@@ -746,6 +777,7 @@ function renderList(){
     const unit = ex.unit === "sec" ? "sec" : weightUnit(ex);
     const wPh = ex.bw ? "0" : unit;
     const sugg = suggestion(ex, variant);
+    const threshold = parseRepRange(ex.reps)[1];
 
     const setRows = rows.map((s,i) => {
       const w = parseFloat(s.w);
@@ -776,9 +808,9 @@ function renderList(){
       </div>
       <div class="tip" id="tip-${ex.id}">${safe(ex.tip)}</div>
       ${skipped ? `<div class="previous-workout"><strong>Saltato in questa seduta</strong><div class="muted">${safe(entry.skipReason||"Nessun motivo indicato")}. La scheda originale non cambia.</div></div>` : previousWorkoutBox(ex, variant)}
-      ${!skipped && sugg ? `<div class="suggest"><b>→</b><span>${sugg}</span></div>` : ""}
+      ${!skipped && sugg ? `<div class="suggest"><b>→</b><span>${sugg}<br><small>Target aumento: ${ex.sets} × ${threshold} rip. a carico costante, tecnica stabile e RIR ${ex.rir}.</small></span></div>` : ""}
       <div class="sets">
-        <div class="set-head"><span></span><span>${unit==="sec"?"zav.":"Carico (${unit})"}</span><span>${unit==="sec"?"Secondi":"Reps"}</span><span></span></div>
+        <div class="set-head"><span></span><span>${unit==="sec"?"zav.":`Carico (${unit})`}</span><span>${unit==="sec"?"Secondi":"Reps"}</span><span></span></div>
         ${skipped ? `<button class="big-btn" data-unskip="${ex.id}">Ripristina esercizio per oggi</button>` : setRows}
         ${String(getProfile().limitations||"").trim() ? `<div class="last">Se hai limitazioni attive, segui le indicazioni del professionista e modifica l'esercizio se necessario.</div>` : ""}
         <div class="set-actions">
@@ -867,7 +899,8 @@ function openSkipExercise(exId){
 function setSkipped(exId,yes,reason=""){
  const ex=day()?.ex.find(e=>e.id===exId);if(!ex)return;
  const entry=exEntry(ex,true);
- if(yes && entry.sets.some(s=>s.d||s.w!==""||s.r!=="") && !confirm("Questo esercizio contiene già serie registrate. Saltarlo ora le conserverà, ma non conteranno come eseguite. Continuare?"))return;
+ if(yes && entry.sets.some(s=>s.d||s.w!==""||s.r!=="") && !confirm("Questo esercizio contiene già serie registrate. Saltarlo ora conserverà le serie già completate nel riepilogo. Le serie non eseguite resteranno escluse. Continuare?"))return;
+ if(!yes)reopenWorkout();
  entry.skipped=!!yes;entry.skipReason=yes?reason:"";
  Store.save();closeSheet();renderList();
  if(yes){if(exerciseDoneForDate(day())){stopTimer();showSessionComplete();}else showToast("Esercizio saltato solo oggi");}
@@ -880,7 +913,9 @@ function toggleSet(row){
   const rows = entry.sets;
   const i = +row.dataset.i;
   const s = rows[i];
+  if(!s.d){startWorkout();reopenWorkout();}
   s.d = !s.d;
+  if(!s.d)reopenWorkout();
 
   if(s.d){
     if(!s.w && !s.r){
@@ -913,7 +948,7 @@ function changeSets(exId, delta){
   const ex = day().ex.find(x => x.id === exId);
   const entry = exEntry(ex, true);
   const rows = entry.sets;
-  if(delta > 0 && rows.length < 10) rows.push({w:"",r:"",d:false});
+  if(delta > 0 && rows.length < 10){rows.push({w:"",r:"",d:false});reopenWorkout();}
   if(delta < 0 && rows.length > 1) rows.pop();
   Store.save();
   renderList();
@@ -1268,7 +1303,7 @@ function exportMarkdown(){
 }
 
 function exportData(){
-  const blob = new Blob([JSON.stringify({sessions:Store.load().sessions,profile:getProfile(),restOverrides:getRestOverrides(),alarmSettings:getAlarmSettings(),activeProgram:localStorage.getItem(PKEY)?JSON.parse(localStorage.getItem(PKEY)):null,programArchive:archiveList(),activeVersion:currentVersion(),sessionVersions:readJSON(SESSION_VERSIONS_KEY,{}),historyLinks:historyLinks(),activeCreatedAt:activeCreated()})], {type:"application/json"});
+  const blob = new Blob([JSON.stringify({sessions:Store.load().sessions,profile:getProfile(),restOverrides:getRestOverrides(),alarmSettings:getAlarmSettings(),activeProgram:localStorage.getItem(PKEY)?JSON.parse(localStorage.getItem(PKEY)):null,programArchive:archiveList(),activeVersion:currentVersion(),sessionVersions:readJSON(SESSION_VERSIONS_KEY,{}),historyLinks:historyLinks(),activeCreatedAt:activeCreated(),workoutMeta:workoutMeta()})], {type:"application/json"});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = "palestra-backup-" + todayISO() + ".json";
@@ -1291,6 +1326,7 @@ function importData(){
         if(obj.restOverrides && typeof obj.restOverrides==="object") localStorage.setItem(REST_OVERRIDES_KEY,JSON.stringify(obj.restOverrides));
         if(obj.alarmSettings && typeof obj.alarmSettings==="object")localStorage.setItem(ALARM_SETTINGS_KEY,JSON.stringify(obj.alarmSettings));
         if(Array.isArray(obj.programArchive)){const older=archiveList(), seen=new Set(older.map(x=>x.id));obj.programArchive.forEach(x=>{if(x&&typeof x.id==="string"&&x.program&&!seen.has(x.id)){older.push(x);seen.add(x.id);}});writeJSON(ARCHIVE_KEY,older);}
+        if(obj.workoutMeta && typeof obj.workoutMeta==="object" && !Array.isArray(obj.workoutMeta))writeJSON(WORKOUT_META_KEY,{...workoutMeta(),...obj.workoutMeta});
         if(obj.sessionVersions && typeof obj.sessionVersions==="object")writeJSON(SESSION_VERSIONS_KEY,{...readJSON(SESSION_VERSIONS_KEY,{}),...obj.sessionVersions});
         if(obj.historyLinks && typeof obj.historyLinks==="object" && !Array.isArray(obj.historyLinks))writeJSON(HISTORY_LINKS_KEY,{...historyLinks(),...obj.historyLinks});
         if(obj.activeProgram){snapshotActive("Prima del ripristino backup");validateProgram(obj.activeProgram,true); localStorage.setItem(PKEY,JSON.stringify(obj.activeProgram)); loadProgram();state.dayId=PROGRAM[0].id;localStorage.setItem(ACTIVE_VERSION_KEY,obj.activeVersion||newVersionId());if(obj.activeCreatedAt)localStorage.setItem(ACTIVE_CREATED_KEY,obj.activeCreatedAt);renderDays();}
@@ -1305,11 +1341,12 @@ function resetDay(){
   if(!confirm("Azzeri i dati di " + dmy(state.date) + "?")) return;
   const db = Store.load();
   delete db.sessions[sessionKey()];
+  const meta=workoutMeta();delete meta[sessionKey()];writeJSON(WORKOUT_META_KEY,meta);
   Store.save(); closeSheet(); renderList();
 }
 function wipe(){
   if(!confirm("Cancelli tutto lo storico? L'operazione non è reversibile.")) return;
-  Store.replace({sessions:{}});
+  Store.replace({sessions:{}});writeJSON(WORKOUT_META_KEY,{});
   closeSheet(); renderList();
 }
 
@@ -1759,11 +1796,22 @@ $("dateInput").value = state.date;
 selectDayForDate();
 renderWelcome();
 
-if("serviceWorker" in navigator){
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
-  });
+const APP_VERSION="3.1.0";
+let updateRegistration=null, remoteVersion=null, updateAccepted=false;
+function updateBanner(){
+ const n=$("updateNotice");if(n||!remoteVersion)return;
+ const el=document.createElement("div");el.id="updateNotice";el.className="note-day";el.style.cssText="margin:10px;padding:12px;";
+ el.innerHTML=`<b>Nuovo aggiornamento · ${safe(remoteVersion)}</b><p>Esporta un backup completo prima di aggiornare.</p><button class="big-btn" id="updateBackup">Scarica backup JSON</button><button class="big-btn primary" id="updateApply" disabled>Ho salvato il backup · Aggiorna</button>`;
+ $("welcomeBox").before(el);
+ $("updateBackup").onclick=()=>{exportData();$("updateApply").disabled=false;};
+ $("updateApply").onclick=async()=>{if(!confirm("Hai verificato che il backup sia stato scaricato?"))return;updateAccepted=true;try{await updateRegistration?.update();}catch(_){}if(updateRegistration?.waiting){updateRegistration.waiting.postMessage({type:"SKIP_WAITING"});}else{location.reload();}};
 }
+async function checkRelease(){try{const r=await fetch("version.json",{cache:"no-store"});if(!r.ok)return;const v=await r.json();if(typeof v.version!=="string"||!/^\d+\.\d+\.\d+$/.test(v.version))return;const a=v.version.split(".").map(Number),b=APP_VERSION.split(".").map(Number);const i=a.findIndex((x,j)=>x!==b[j]);if(i>=0&&a[i]>b[i]){remoteVersion=v.version;updateBanner();}}catch(_){}}
+if("serviceWorker" in navigator){
+ navigator.serviceWorker.addEventListener("controllerchange",()=>{if(updateAccepted)location.reload();});
+ window.addEventListener("load",async()=>{try{updateRegistration=await navigator.serviceWorker.register("sw.js",{updateViaCache:"none"});await updateRegistration.update();}catch(_){}checkRelease();});
+}
+window.addEventListener("focus",checkRelease);document.addEventListener("visibilitychange",()=>{if(!document.hidden)checkRelease();});
 </script>
 </body>
 </html>

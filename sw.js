@@ -1,14 +1,7 @@
-const CACHE="progym-v303-20261114";
+const CACHE="progym-v310-20261120";
 const ASSETS=["./","./index.html","./manifest.json","./icon-192.png","./icon-512.png"];
-self.addEventListener("install",event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting()));});
-self.addEventListener("activate",event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>(key.startsWith("palestra-coach-")||key.startsWith("progym-"))&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim()));});
-self.addEventListener("fetch",event=>{if(event.request.method!=="GET"||new URL(event.request.url).origin!==self.location.origin)return;event.respondWith(fetch(event.request).then(response=>{if(response.ok){const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(event.request,copy));}return response;}).catch(()=>caches.match(event.request).then(res=>res||caches.match("./index.html"))));});
-
-// Alla pressione sulla notifica torna all’app: il timer rimane visibile finché non viene confermato.
-self.addEventListener("notificationclick",event=>{
- event.notification.close();
- event.waitUntil(self.clients.matchAll({type:"window",includeUncontrolled:true}).then(clients=>{
-  const open=clients.find(c=>new URL(c.url).pathname.startsWith(new URL(self.registration.scope).pathname));
-  return open?open.focus():self.clients.openWindow("./");
- }));
-});
+self.addEventListener("install",e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS))));
+self.addEventListener("message",e=>{if(e.data?.type==="SKIP_WAITING")self.skipWaiting();});
+self.addEventListener("activate",e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>(k.startsWith("progym-")||k.startsWith("palestra-coach-"))&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
+self.addEventListener("fetch",e=>{const u=new URL(e.request.url);if(e.request.method!=="GET"||u.origin!==self.location.origin)return;if(u.pathname.endsWith("/version.json")){e.respondWith(fetch(e.request,{cache:"no-store"}));return;}if(e.request.mode==="navigate"){e.respondWith(caches.open(CACHE).then(c=>c.match("./index.html")).then(r=>r||fetch(e.request)));return;}e.respondWith(caches.open(CACHE).then(c=>c.match(e.request)).then(r=>r||fetch(e.request)));});
+self.addEventListener("notificationclick",e=>{e.notification.close();e.waitUntil(self.clients.matchAll({type:"window",includeUncontrolled:true}).then(cs=>{const c=cs.find(c=>new URL(c.url).pathname.startsWith(new URL(self.registration.scope).pathname));return c?c.focus():self.clients.openWindow("./");}));});
