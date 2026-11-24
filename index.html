@@ -257,6 +257,22 @@ body{padding-bottom:calc(155px + env(safe-area-inset-bottom))}
 .mtrack{height:10px;background:var(--surface-2);border-radius:6px;overflow:hidden}
 .mtrack i{display:block;height:100%;background:var(--accent);border-radius:6px}
 .mval{font-size:.82rem;font-weight:700;text-align:right}
+
+/* proGYM 3.2: report a colori e cronometro verificabile */
+.report-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:12px 0}
+.report-card{min-width:0;background:var(--surface-2);border:1px solid var(--line);border-radius:13px;padding:12px}
+.report-label{color:var(--muted);font-size:.75rem;display:block;margin-bottom:4px}
+.report-value{font-size:1.18rem;font-weight:750;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.report-change{font-size:.78rem;font-weight:700;display:inline-block;margin-top:4px}
+.report-up{color:#52e4a4}.report-down{color:#ff8989}.report-neutral{color:#aab6c8}.report-caution{color:#ffc36c}
+.report-exercise{border:1px solid var(--line);border-radius:12px;padding:12px;margin:9px 0;background:var(--surface-2)}
+.report-exercise strong{display:block;font-size:.91rem;margin-bottom:6px}
+.report-exercise small{display:block;color:var(--muted);margin-top:3px}
+.chrono-strip{border:1px solid var(--line);background:var(--surface-2);padding:12px;border-radius:12px;margin:8px 0}
+.chrono-strip .num{font-size:1.25rem;font-weight:800}
+.chrono-strip small{display:block;color:var(--muted);font-size:.73rem}
+.chrono-reset{display:inline-block;font-size:.73rem;color:var(--accent);text-decoration:underline;padding:7px 0}
+@media(max-width:330px){.report-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -492,10 +508,52 @@ function startWorkout(explicit=false){
 }
 function reopenWorkout(){const m=workoutMeta(),k=sessionKey();if(m[k]?.finishedAt){delete m[k].finishedAt;writeJSON(WORKOUT_META_KEY,m);}}
 function finishWorkout(){const m=workoutMeta(),k=sessionKey();if(!m[k])m[k]={version:currentVersion(),title:day().title};if(!m[k].finishedAt)m[k].finishedAt=Date.now();writeJSON(WORKOUT_META_KEY,m);}
-function durationText(m){if(!m?.startedAt||!m?.finishedAt||m.finishedAt<m.startedAt)return "Non registrata";const mins=Math.floor((m.finishedAt-m.startedAt)/60000);return `${Math.floor(mins/60)} h ${mins%60} min${m.explicit?"":" (dal primo intervento)"}`;}
+function durationText(m){
+ if(!m?.startedAt||!m?.finishedAt||m.finishedAt<m.startedAt)return "Non registrata";
+ const sec=Math.floor((m.finishedAt-m.startedAt)/1000);
+ return `${Math.floor(sec/3600)} h ${String(Math.floor(sec%3600/60)).padStart(2,"0")} min ${String(sec%60).padStart(2,"0")} s${m.explicit?"":" (dal primo flag)"}`;
+}
+function clockTime(ts){return ts?new Date(ts).toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit",second:"2-digit"}):"Non registrata";}
+function chronoLiveHtml(m){
+ if(!m?.startedAt)return '<button class="big-btn primary" id="workoutStart">Avvia allenamento</button><div class="sub">La durata partirà dal primo flag se non premi Avvia.</div>';
+ const current=m.finishedAt || Date.now();
+ const sec=Math.max(0,Math.floor((current-m.startedAt)/1000));
+ const h=String(Math.floor(sec/3600)).padStart(2,"0"),mi=String(Math.floor(sec%3600/60)).padStart(2,"0"),se=String(sec%60).padStart(2,"0");
+ return `<div class="chrono-strip"><b>Durata seduta</b><div class="num" id="workoutElapsed">${h}:${mi}:${se}</div><small>Inizio: ${clockTime(m.startedAt)} · Include esercizi e pause · ${m.explicit?"Avvio manuale":"Avvio al primo flag"}</small><button class="chrono-reset" id="chronoReset" type="button">Correggi ora di inizio</button></div>`;
+}
+function resetChronoStart(){
+ const k=sessionKey(),m=workoutMeta();if(!m[k])return;
+ if(!confirm("Riavviare il cronometro da adesso? Lo storico delle serie non cambia. L'ora precedente sarà sostituita."))return;
+ m[k]={...m[k],startedAt:Date.now(),explicit:true};delete m[k].finishedAt;writeJSON(WORKOUT_META_KEY,m);renderList();
+}
+function updateChronoDisplay(){
+ const el=document.getElementById("workoutElapsed");if(!el)return;
+ const m=workoutMeta()[sessionKey()];if(!m?.startedAt)return;
+ const sec=Math.max(0,Math.floor(((m.finishedAt||Date.now())-m.startedAt)/1000));
+ el.textContent=[Math.floor(sec/3600),Math.floor(sec%3600/60),sec%60].map(x=>String(x).padStart(2,"0")).join(":");
+}
+setInterval(()=>{if(!document.hidden)updateChronoDisplay()},1000);
 function statsFor(raw){const sets=(Array.isArray(raw)?raw:raw?.sets||[]).filter(x=>x.d);const valid=sets.filter(x=>x.r!==""&&x.r!=null&&Number.isFinite(Number(x.r))&&Number(x.r)>=0);const weighted=valid.filter(x=>x.w!==""&&x.w!=null&&Number.isFinite(Number(x.w))&&Number(x.w)>=0);return {sets:sets.length,reps:valid.reduce((a,x)=>a+Number(x.r),0),volume:weighted.reduce((a,x)=>a+Number(x.r)*Number(x.w),0),weighted:weighted.length};}
+function reportTone(current,previous,comparable=true){if(!comparable||!Number.isFinite(current)||!Number.isFinite(previous))return "report-neutral";return current>previous+0.00001?"report-up":current<previous-0.00001?"report-down":"report-neutral";}
+function reportChange(current,previous,unit="",comparable=true){
+ if(!comparable)return `<span class="report-change report-neutral">Confronto non omogeneo</span>`;
+ const value=Math.round((current-previous)*100)/100;
+ return `<span class="report-change ${reportTone(current,previous,true)}">${value>0?"▲ +":value<0?"▼ ":"= "}${value.toLocaleString("it-IT",{maximumFractionDigits:2})}${unit}</span>`;
+}
+function reportMetric(title,value,extra=""){
+ return `<div class="report-card"><span class="report-label">${title}</span><div class="report-value">${value}</div>${extra}</div>`;
+}
+function avgCompletedLoad(raw){
+ const valid=(Array.isArray(raw)?raw:raw?.sets||[]).filter(s=>s.d&&s.w!==""&&s.w!=null&&Number.isFinite(Number(s.w)));
+ return valid.length?valid.reduce((a,s)=>a+Number(s.w),0)/valid.length:null;
+}
+function sameCompletedLoads(a,b){
+ const extract=e=>(Array.isArray(e)?e:e?.sets||[]).filter(s=>s.d).map(s=>s.w===""||s.w==null?null:Number(s.w));
+ const x=extract(a),y=extract(b);
+ return x.length===y.length&&x.length>0&&x.every((v,i)=>v!==null&&y[i]!==null&&Number.isFinite(v)&&Math.abs(v-y[i])<0.0001);
+}
 function sessionReport(){
- const d=day(), current=session(), k=sessionKey();
+ const d=day(),k=sessionKey();
  const entries=d.ex.map(ex=>({ex,raw:exEntry(ex),variant:exEntry(ex)?.variant||ex.name}));
  const sum=items=>items.reduce((a,b)=>({sets:a.sets+b.sets,reps:a.reps+b.reps,volume:a.volume+b.volume,weighted:a.weighted+b.weighted}),{sets:0,reps:0,volume:0,weighted:0});
  const actual=sum(entries.map(e=>statsFor(e.raw)));
@@ -504,15 +562,36 @@ function sessionReport(){
  const performed=entries.filter(e=>statsFor(e.raw).sets>0);
  const candidates=new Map();
  performed.forEach(e=>historyRecords(e.ex,e.variant).forEach(r=>{if(!statsFor(r.raw).sets)return;const group=candidates.get(r.k)||new Map();if(!group.has(e.ex.id))group.set(e.ex.id,r);candidates.set(r.k,group);}));
- // Prefer same day ID; across revisions require at least two matches and majority of performed exercises.
- const eligible=[...candidates.entries()].filter(([key,g])=>key.endsWith("__"+d.id)||(g.size>=2&&g.size>performed.length/2)).sort((a,b)=>b[0].localeCompare(a[0]));
- const previous=eligible[0];let comparison="<p class='sub'>Nessuna seduta equivalente identificabile con sufficiente certezza.</p>";
- if(previous){const [pk,matches]=previous;const used=new Set();const pairs=performed.filter(e=>{const r=matches.get(e.ex.id);if(!r||used.has(r.sourceId))return false;used.add(r.sourceId);return true;});
- const now=sum(pairs.map(e=>statsFor(e.raw))),old=sum(pairs.map(e=>statsFor(matches.get(e.ex.id).raw)));
- const delta=(a,b)=>`${a-b>=0?"+":""}${Math.round((a-b)*100)/100}`;
+ const eligible=[...candidates.entries()].filter(([key,g])=>key!==k&&(key.endsWith("__"+d.id)||(g.size>=2&&g.size>performed.length/2))).sort((a,b)=>b[0].localeCompare(a[0]));
+ const previous=eligible[0];
  const n=v=>v.toLocaleString("it-IT",{maximumFractionDigits:1});
- comparison=`<h3>Confronto · ${safe(pk.slice(0,10))}</h3><p class="sub">${pairs.length} esercizi confrontabili su ${performed.length} eseguiti oggi. Confronto a parità di identità storica, non dell'intera scheda.</p><div class="preview-day"><b>Serie ${old.sets} → ${now.sets} (${delta(now.sets,old.sets)})</b><small>Ripetizioni ${old.reps} → ${now.reps} (${delta(now.reps,old.reps)})</small><small>Volume-carico esterno registrato ${n(old.volume)} → ${n(now.volume)} kg·rip. (${delta(now.volume,old.volume)})${old.volume>0?` · ${delta(now.volume/old.volume*100,100)}%`:""}</small></div>`+pairs.map(e=>{const x=statsFor(e.raw),y=statsFor(matches.get(e.ex.id).raw);return `<div class="preview-day"><b>${safe(e.variant)}</b><small>Serie ${y.sets} → ${x.sets} · Rip. ${y.reps} → ${x.reps}</small><small>Volume esterno ${n(y.volume)} → ${n(x.volume)} kg·rip.</small></div>`;}).join("");}
- return `<h2>Riepilogo allenamento</h2><p><b>${safe(d.title)}</b> · ${safe(state.date)}</p><div class="preview-day"><b>Durata: ${safe(durationText(workoutMeta()[k]))}</b><small>Serie eseguite ${actual.sets} / ${planned} programmate · Esercizi saltati ${skipped}</small><small>Ripetizioni registrate ${actual.reps} · Volume-carico esterno ${actual.volume.toLocaleString("it-IT",{maximumFractionDigits:1})} kg·rip.</small></div>${comparison}<p class="sub">Il volume usa i carichi inseriti in kg, non stima il peso corporeo, la resistenza reale delle macchine o il lavoro muscolare. Serie già eseguite prima di uno skip restano conteggiate. Durata inclusiva delle pause; nessuna stima per vecchie sedute.</p>`;
+ let comparison="<p class='sub'>Nessuna seduta precedente sufficientemente confrontabile: i nuovi esercizi iniziano uno storico indipendente.</p>";
+ if(previous){
+  const [pk,matches]=previous, used=new Set();
+  const pairs=performed.filter(e=>{const r=matches.get(e.ex.id);if(!r||used.has(r.sourceId))return false;used.add(r.sourceId);return true;});
+  const now=sum(pairs.map(e=>statsFor(e.raw))),old=sum(pairs.map(e=>statsFor(matches.get(e.ex.id).raw)));
+  // Confronti aggregati hanno senso soltanto sugli stessi esercizi e set completati; non equivale a crescita muscolare.
+  const sameSetCounts=pairs.every(e=>statsFor(e.raw).sets===statsFor(matches.get(e.ex.id).raw).sets);
+  const sameLoads=pairs.every(e=>sameCompletedLoads(e.raw,matches.get(e.ex.id).raw));
+  comparison=`<h3>Confronto · ${safe(pk.slice(0,10))}</h3><p class="sub">${pairs.length} esercizi confrontabili su ${performed.length} eseguiti. I totali confrontano soltanto gli esercizi abbinati.</p>`+
+   `<div class="report-grid">${reportMetric("Serie comparabili",`${old.sets} → ${now.sets}`,reportChange(now.sets,old.sets))}${reportMetric("Ripetizioni",`${old.reps} → ${now.reps}`,reportChange(now.reps,old.reps,"",sameSetCounts&&sameLoads))}${reportMetric("Volume-carico kg·rip.",`${n(old.volume)} → ${n(now.volume)}`,reportChange(now.volume,old.volume,"",sameSetCounts&&sameLoads))}${reportMetric("Esercizi confrontati",`${pairs.length} / ${performed.length}`,`<span class="report-change report-neutral">Stessa identità confermata</span>`)}</div>`+
+   pairs.map(e=>{const x=statsFor(e.raw),y=statsFor(matches.get(e.ex.id).raw),equiv=x.sets===y.sets,loads=sameCompletedLoads(e.raw,matches.get(e.ex.id).raw);
+    const loadNote=!equiv?"Numero di serie diverso":!loads?"Carichi cambiati: la riduzione delle ripetizioni potrebbe essere prevista":"Stesse serie e stessi carichi";
+    const prevLoad=avgCompletedLoad(matches.get(e.ex.id).raw),curLoad=avgCompletedLoad(e.raw);
+    let loadInfo='<span class="report-change report-neutral">Carichi non disponibili</span>';
+    if(prevLoad!==null&&curLoad!==null){
+      const increased=curLoad>prevLoad+0.0001,declined=curLoad<prevLoad-0.0001;
+      const validIncrease=equiv&&increased&&x.reps>=y.reps;
+      const className=!equiv?"report-neutral":validIncrease?"report-up":declined?"report-down":increased?"report-caution":"report-neutral";
+      loadInfo=`<span class="report-change ${className}">${increased?"▲ ":declined?"▼ ":"= "}${n(prevLoad)} → ${n(curLoad)} kg medi per serie${increased&&!validIncrease?" (valuta anche le ripetizioni)":""}</span>`;
+    }
+    return `<div class="report-exercise"><strong>${safe(e.variant)}</strong><small>Serie: ${y.sets} → ${x.sets} · Ripetizioni: ${y.reps} → ${x.reps} ${reportChange(x.reps,y.reps,"",equiv&&loads)}</small><small>Carico: ${loadInfo}</small><small>Volume-carico: ${n(y.volume)} → ${n(x.volume)} kg·rip. ${reportChange(x.volume,y.volume,"",equiv&&loads)}</small><small>${loadNote}</small></div>`;}).join("");
+ }
+ const m=workoutMeta()[k]||{};
+ return `<h2>Riepilogo allenamento</h2><p><b>${safe(d.title)}</b> · ${safe(state.date)}</p>`+
+ `<div class="report-grid">${reportMetric("Durata reale",safe(durationText(m)))}${reportMetric("Serie completate",`${actual.sets} / ${planned}`)}${reportMetric("Ripetizioni totali",actual.reps)}${reportMetric("Volume-carico esterno",`${n(actual.volume)} kg·rip.`)}</div>`+
+ `<div class="preview-day"><b>Controllo cronometro</b><small>Ora di inizio: ${safe(clockTime(m.startedAt))}</small><small>Ora di fine: ${safe(clockTime(m.finishedAt))}</small><small>Avvio: ${m.explicit?"manuale":"automatico al primo flag"}. La durata comprende lavoro e recuperi, non è la somma delle pause. Se un orario non è stato registrato, la durata resta non disponibile.</small><small>Esercizi saltati: ${skipped}</small></div>`+
+ comparison+`<p class="sub">Colori: verde = miglioramento confrontabile; rosso = diminuzione; giallo = carico maggiore ma ripetizioni inferiori; grigio = invariato o dati non omogenei. Un aumento del volume non prova maggiore ipertrofia. Il volume non include una stima del peso corporeo negli esercizi a corpo libero.</p>`;
 }
 function showSessionComplete(){finishWorkout();openSheet(`<h2>Allenamento terminato!</h2>${sessionReport()}<button class="big-btn primary" id="closeFinishedSession">Termina e torna alla scheda</button>`);$("closeFinishedSession").onclick=()=>{closeSheet();showToast("Seduta completata con successo!");};}
 const MUSCLE_OPTIONS = ["Petto","Dorso","Spalle","Bicipiti","Tricipiti","Quadricipiti","Femorali","Glutei","Adduttori","Polpacci","Core","Collo","Altro"];
@@ -710,6 +789,10 @@ function previousWorkoutBox(ex,variant){
   const items=sets.map((s,i)=>`<span class="pill">${i+1}ª: <b>${safe(s.r)} rip.</b>${ex.bw ? (Number(s.w)>0?" · +"+safe(weightText(s.w,ex)):" · corpo libero") : (s.w!==""?" · "+safe(weightText(s.w,ex)):"")}</span>`).join("");
   return `<div class="previous-workout"><strong>ULTIMA VOLTA · ${dmy(last.date)}</strong><div class="line">${items}</div><div class="muted">Questi valori sono lo storico registrato, non obiettivi ancora da completare.</div></div>`;
 }
+function coachingMode(){
+ const p=getProfile(),g=String(p.goal||"Ipertrofia"),years=Number(p.experience);
+ return {goal:g,level:!Number.isFinite(years)||years<1?"iniziale":years<3?"intermedio":"avanzato",increment:Number(p.loadIncrementKg)>0?Number(p.loadIncrementKg):2.5};
+}
 function suggestion(ex,variant){
   if(ex.unit==="sec")return null;
   const last=lastPerformance(ex,variant);
@@ -727,10 +810,16 @@ function suggestion(ex,variant){
   if(completed.length!==ex.sets)return `Hai registrato ${completed.length} serie su ${ex.sets} previste. <b>Ripeti il carico e completa il programma</b> prima di aumentarlo.`;
   if(!sameLoad)return `L'ultima seduta contiene carichi diversi o mancanti: <b>consolida le serie</b> e confronta tecnica e ripetizioni; nessun aumento automatico.`;
   if(reps.some(n=>n<min))return `Ultima seduta: ${reps.join(" / ")} rip. (totale ${total}), almeno una serie sotto ${min}. <b>Consolida ${loadText}</b> o riducilo se la tecnica peggiora.`;
-  if(reps.every(n=>n>=max))return `Ultima seduta: ${reps.join(" / ")} rip. (totale ${total}). <b>Valuta un piccolo incremento di carico</b> solo se tutte le serie erano controllate e con margine sufficiente.`;
+  if(reps.every(n=>n>=max)){
+    const mode=coachingMode();
+    const inc=weightUnit(ex)==="lb"? Math.round(mode.increment/KG_PER_LB*10)/10:mode.increment;
+    const suffix=ex.bw?"di zavorra, se appropriata":"sul macchinario, se disponibile";
+    return `Ultima seduta: ${reps.join(" / ")} rip. (totale ${total}). <b>Hai raggiunto ${ex.sets} × ${max}.</b> Per ${safe(mode.goal.toLowerCase())} (${mode.level}) valuta un incremento minimo di circa <b>${inc} ${weightUnit(ex)}</b> ${suffix}, soltanto se tecnica e RIR ${ex.rir} erano rispettati. In alternativa ripeti il carico per confermare il risultato.`;
+  }
   const target=[...reps];
   for(let i=target.length-1;i>=0;i--){if(target[i]<max){target[i]++;break;}}
-  return `Ultima seduta: <b>${reps.join(" / ")} rip.</b> (totale ${total}). Oggi mantieni <b>${loadText}</b> e prova <b>${target.join(" / ")}</b> (totale ${total+1}). Se la giornata è più faticosa, ripetere i risultati precedenti va bene.`;
+  const mode=coachingMode();
+  return `Obiettivo ${safe(mode.goal)} · livello ${mode.level}. Ultima seduta: <b>${reps.join(" / ")} rip.</b> (totale ${total}). Mantieni <b>${loadText}</b> e prova <b>${target.join(" / ")}</b> (totale ${total+1}), conservando tecnica e RIR ${ex.rir}. È un suggerimento, non un obbligo.`;
 }
 
 /* =========================================================
@@ -762,8 +851,9 @@ function renderList(){
   $("dayNote").innerHTML = (isFlexibleSchedule()?`<div class="flexible-hint"><b>Giorni flessibili:</b> oggi puoi svolgere qualunque giornata della scheda. Selezionala dalle schede in alto; ${recommended?`prossima seduta suggerita: <b>${safe(recommended.title)}</b>`:"scegli la tua prima seduta"}. Non è un obbligo: rispetta il recupero tra le sedute.</div>`:"")+(d.note ? `<div class="note-day">${safe(d.note)}</div>` : "");
 
   const meta=workoutMeta()[sessionKey()];
-  $("dayNote").innerHTML+=`<div class="analytics-status">${exerciseDoneForDate(d)?'<button class="big-btn" id="workoutReport">Riepilogo seduta</button>':state.date===todayISO()?meta?.startedAt?'<div class="sub">Seduta avviata · Durata in registrazione</div>':'<button class="big-btn primary" id="workoutStart">Avvia allenamento</button>':''}</div>`;
+  $("dayNote").innerHTML+=`<div class="analytics-status">${exerciseDoneForDate(d)?'<button class="big-btn" id="workoutReport">Riepilogo seduta</button>':state.date===todayISO()?chronoLiveHtml(meta):''}</div>`;
   if($("workoutStart"))$("workoutStart").onclick=()=>{startWorkout(true);renderList();};
+  if($("chronoReset"))$("chronoReset").onclick=resetChronoStart;
   if($("workoutReport"))$("workoutReport").onclick=()=>{openSheet(sessionReport()+'<button class="big-btn" onclick="closeSheet()">Chiudi</button>');};
   $("list").innerHTML = d.ex.map(ex => {
     const entry = exEntry(ex);
@@ -1486,6 +1576,7 @@ function openProfile(fromGuide=false){
         <option value="global" ${p.restMode==="global"?"selected":""}>Usa il mio tempo predefinito per tutti</option>
       </select>
     </label>
+    <label class="profile-field">Incremento minimo orientativo del carico (kg)<input id="pf_loadIncrementKg" type="number" min="0.25" max="20" step="0.25" value="${safeAttr(p.loadIncrementKg||2.5)}"></label>
     <label class="profile-field">Tempo predefinito (secondi, 15–600)<input id="pf_defaultRestSeconds" type="number" min="15" max="600" step="15" value="${safeAttr(p.defaultRestSeconds||180)}"></label>
     <p class="warn">Puoi comunque cambiare il recupero di ogni esercizio dal pulsante ⏱ Recupero. Le modifiche specifiche prevalgono sul tempo predefinito.</p>
     ${field("Preferenze e limitazioni (facoltativo)","limitations")}
@@ -1503,6 +1594,8 @@ function openProfile(fromGuide=false){
     vals.equipment=$("pf_equipment").value;
     vals.restMode=$("pf_restMode").value;
     vals.defaultRestSeconds=Number($("pf_defaultRestSeconds").value);
+    vals.loadIncrementKg=Number($("pf_loadIncrementKg").value);
+    if(!Number.isFinite(vals.loadIncrementKg)||vals.loadIncrementKg<0.25||vals.loadIncrementKg>20){alert("Incremento del carico: indica un valore tra 0,25 e 20 kg.");return;}
     if(!Number.isInteger(vals.defaultRestSeconds)||vals.defaultRestSeconds<15||vals.defaultRestSeconds>600){alert("Recupero predefinito: tra 15 e 600 secondi.");return;}
     if(!Number.isInteger(vals.durationMinutes)||vals.durationMinutes<20||vals.durationMinutes>240){alert("Durata: indica un valore tra 20 e 240 minuti.");return;}
     vals.scheduleMode=$("pf_scheduleMode").value;
@@ -1796,7 +1889,7 @@ $("dateInput").value = state.date;
 selectDayForDate();
 renderWelcome();
 
-const APP_VERSION="3.1.0";
+const APP_VERSION="3.2.0";
 let updateRegistration=null, remoteVersion=null, updateAccepted=false;
 function updateBanner(){
  const n=$("updateNotice");if(n||!remoteVersion)return;

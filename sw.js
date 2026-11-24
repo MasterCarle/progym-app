@@ -1,4 +1,4 @@
-const CACHE="progym-v310-20261120";
+const CACHE="progym-v320-20261124";
 const ASSETS=["./","./index.html","./manifest.json","./icon-192.png","./icon-512.png"];
 self.addEventListener("install",e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS))));
 self.addEventListener("message",e=>{if(e.data?.type==="SKIP_WAITING")self.skipWaiting();});
